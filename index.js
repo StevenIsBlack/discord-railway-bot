@@ -144,5 +144,50 @@ client.on("interactionCreate", async interaction => {
     await interaction.reply("The invite list has been cleared.");
   }
 });
+const axios = require('axios');
+const MC_API = process.env.MC_BOT_URL;
 
+client.on('messageCreate', async (message) => {
+    if (message.author.bot) return;
+    if (!message.content.startsWith('!')) return;
+    
+    const args = message.content.slice(1).split(' ');
+    const cmd = args[0];
+    
+    try {
+        // Check bot status
+        if (cmd === 'status') {
+            const res = await axios.get(MC_API + '/status');
+            message.reply(`🤖 Bots Online: ${res.data.online}/${res.data.total}`);
+        }
+        
+        // Add new account
+        if (cmd === 'add' && args[1]) {
+            const res = await axios.post(MC_API + '/add', { token: args[1] });
+            message.reply(`✅ Added: ${res.data.username}`);
+        }
+        
+        // Start all bots
+        if (cmd === 'start') {
+            await axios.post(MC_API + '/startall');
+            message.reply('🚀 Starting all bots!');
+        }
+        
+        // Stop all bots
+        if (cmd === 'stop') {
+            await axios.post(MC_API + '/stopall');
+            message.reply('🛑 Stopped all bots!');
+        }
+        
+        // List accounts
+        if (cmd === 'list') {
+            const res = await axios.get(MC_API + '/list');
+            const list = res.data.accounts.map((a, i) => `${i+1}. ${a.username}`).join('\n');
+            message.reply('**Accounts:**\n' + list);
+        }
+        
+    } catch (err) {
+        message.reply('❌ Error!');
+    }
+});
 client.login(process.env.TOKEN);
