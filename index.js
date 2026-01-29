@@ -108,7 +108,7 @@ client.on("interactionCreate", async interaction => {
   }
 
   if (commandName === "reward") {
-    await interaction.reply("Thank you for inviting, please leave a vouch at <#1447280588842336368>");
+    await interaction.reply("Thank you for inviting, when you have recieved your money please leave a vouch at <#1447280588842336368>");
   }
 
   if (commandName === "inviteadd") {
