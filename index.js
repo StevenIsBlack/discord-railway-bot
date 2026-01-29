@@ -55,15 +55,15 @@ client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === "website") {
-    await interaction.reply("https://YOURWEBSITE.com");
+    await interaction.reply("https://www.donutmarket.eu/");
   }
 
   if (interaction.commandName === "vouch") {
-    await interaction.reply("EDIT THIS VOUCH MESSAGE");
+    await interaction.reply("When you have recieved your product pelase vouch #vouches");
   }
 
   if (interaction.commandName === "reward") {
-    await interaction.reply("EDIT THIS REWARD MESSAGE");
+    await interaction.reply("Pelase vouch #vouches-rewards");
   }
 });
 
