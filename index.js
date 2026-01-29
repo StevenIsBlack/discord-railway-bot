@@ -59,11 +59,11 @@ client.on("interactionCreate", async interaction => {
   }
 
   if (interaction.commandName === "vouch") {
-    await interaction.reply("When you have recieved your product/s pelase vouch <#1449355333637115904>");
+    await interaction.reply("When you have recieved your product/s please vouch at <#1449355333637115904>");
   }
 
   if (interaction.commandName === "reward") {
-    await interaction.reply("Thank you for inviting please leave a vouch <#1447280588842336368>");
+    await interaction.reply("Thank you for inviting please leave a vouch at <#1447280588842336368>");
   }
 });
 
