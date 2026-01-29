@@ -1,4 +1,5 @@
 require("dotenv").config();
+const fs = require("fs");
 const {
   Client,
   GatewayIntentBits,
@@ -11,9 +12,25 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 });
 
-// ---------- INVITE LIST ----------
+// ---------- INVITE LIST PERSISTENCE ----------
 
-let inviteList = []; // in-memory list of users
+const DATA_FILE = "./invites.json";
+
+// Load invite list from file or start empty
+let inviteList = {};
+if (fs.existsSync(DATA_FILE)) {
+  try {
+    inviteList = JSON.parse(fs.readFileSync(DATA_FILE, "utf-8"));
+  } catch (err) {
+    console.error("Failed to read invite list:", err);
+    inviteList = {};
+  }
+}
+
+// Helper to save invite list
+function saveInviteList() {
+  fs.writeFileSync(DATA_FILE, JSON.stringify(inviteList, null, 2));
+}
 
 // ---------- COMMANDS ----------
 
@@ -37,6 +54,11 @@ const commands = [
       option.setName("user")
         .setDescription("The user to add")
         .setRequired(true)
+    )
+    .addIntegerOption(option =>
+      option.setName("amount")
+        .setDescription("Number of invites to add")
+        .setRequired(false)
     ),
 
   new SlashCommandBuilder()
@@ -91,28 +113,34 @@ client.on("interactionCreate", async interaction => {
 
   if (commandName === "inviteadd") {
     const user = interaction.options.getUser("user");
+    const amount = interaction.options.getInteger("amount") || 1;
 
-    if (inviteList.includes(user.id)) {
-      await interaction.reply(`${user.tag} is already on the invite list.`);
-      return;
-    }
+    if (!inviteList[user.id]) inviteList[user.id] = 0;
+    inviteList[user.id] += amount;
 
-    inviteList.push(user.id);
-    await interaction.reply(`${user.tag} has been added to the invite list.`);
+    saveInviteList();
+
+    await interaction.reply(`${user.tag} has been added with **${amount} invite(s)**. Total: **${inviteList[user.id]}**`);
   }
 
   if (commandName === "invlist") {
-    if (inviteList.length === 0) {
+    const entries = Object.entries(inviteList);
+    if (entries.length === 0) {
       await interaction.reply("The invite list is currently empty.");
       return;
     }
 
-    const mentions = inviteList.map(id => `<@${id}>`).join("\n");
-    await interaction.reply(`**Invite List:**\n${mentions}`);
+    // Build a clean list
+    const formattedList = entries
+      .map(([id, count], index) => `${index + 1}. <@${id}> - ${count} invite(s)`)
+      .join("\n");
+
+    await interaction.reply(`**Invite List:**\n${formattedList}`);
   }
 
   if (commandName === "invlistreset") {
-    inviteList = [];
+    inviteList = {};
+    saveInviteList();
     await interaction.reply("The invite list has been cleared.");
   }
 });
