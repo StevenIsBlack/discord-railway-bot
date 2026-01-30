@@ -34,17 +34,8 @@ client.on('messageCreate', async (message) => {
             await message.reply(`🤖 **Bot Status**\nOnline: ${res.data.online}/${res.data.total}`);
         }
         
-       if (cmd === 'add') {
-  if (!args[1])
-    return message.reply('Usage: `!add <refreshToken>`');
-
-  const res = await axios.post(`${MC_API}/add`, {
-    refreshToken: args[1]
-  });
-
-  await message.reply(`Added ${res.data.username}`);
-}
-
+        if (cmd === 'add') {
+            if (!args[1]) return message.reply('Usage: `!add <token>`');
             
             const res = await axios.post(`${MC_API}/add`, { 
                 token: args[1],
