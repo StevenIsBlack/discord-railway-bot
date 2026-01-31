@@ -1,9 +1,8 @@
 const { Client, GatewayIntentBits, EmbedBuilder } = require('discord.js');
 const axios = require('axios');
 
-// IMPORTANT: Set these in Railway environment variables
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const BOT_API_URL = process.env.BOT_API_URL; // Your MC bot Railway URL
+const BOT_API_URL = process.env.BOT_API_URL;
 
 if (!DISCORD_TOKEN) {
     console.error('❌ DISCORD_TOKEN not set in environment variables!');
@@ -24,7 +23,6 @@ const client = new Client({
     ]
 });
 
-// Helper to call MC bot API
 async function callBotAPI(endpoint, data = {}) {
     try {
         const response = await axios.post(`${BOT_API_URL}${endpoint}`, data, {
@@ -41,12 +39,10 @@ async function callBotAPI(endpoint, data = {}) {
     }
 }
 
-// Generate unique bot ID from token
 function generateBotId(token) {
     try {
         const parts = token.split(':');
         const email = parts[0];
-        // Use first part of email as ID
         return email.split('@')[0] + '_' + Date.now().toString().slice(-4);
     } catch (e) {
         return 'bot_' + Date.now().toString().slice(-6);
@@ -56,14 +52,11 @@ function generateBotId(token) {
 client.on('ready', () => {
     console.log(`✅ Discord bot logged in as ${client.user.tag}`);
     console.log(`🔗 Connected to MC Bot API: ${BOT_API_URL}`);
-    client.user.setActivity('!help for commands', { type: 3 }); // Type 3 = WATCHING
+    client.user.setActivity('!help for commands', { type: 3 });
 });
 
 client.on('messageCreate', async (message) => {
-    // Ignore bot messages
     if (message.author.bot) return;
-    
-    // Only respond to commands starting with !
     if (!message.content.startsWith('!')) return;
     
     const args = message.content.slice(1).trim().split(/ +/);
@@ -72,17 +65,13 @@ client.on('messageCreate', async (message) => {
     try {
         switch (command) {
             case 'add': {
-                // !add email:password:token
                 if (args.length < 1) {
                     return message.reply('❌ Usage: `!add <email:password:token>`\nExample: `!add user@gmail.com:pass123:eyJraWQi...`');
                 }
                 
-                const token = args.join(' '); // Join all args in case token has spaces
-                
-                // Generate a unique bot ID
+                const token = args.join(' ');
                 const botId = generateBotId(token);
                 
-                // Delete the message to hide the token
                 try {
                     await message.delete();
                     console.log('✅ Deleted message with token for security');
@@ -107,7 +96,7 @@ client.on('messageCreate', async (message) => {
                             { name: 'Bot ID', value: botId, inline: true },
                             { name: 'MC Username', value: result.mcUsername || 'Unknown', inline: true },
                             { name: 'Server', value: 'donutsmp.net', inline: true },
-                            { name: 'Status', value: '🟢 Online', inline: false }
+                            { name: 'Status', value: '🟢 Starting...', inline: false }
                         )
                         .setTimestamp()
                         .setFooter({ text: 'Use !remove ' + botId + ' to stop this bot' });
@@ -122,7 +111,6 @@ client.on('messageCreate', async (message) => {
             
             case 'remove':
             case 'stop': {
-                // !remove botId  or  !stop botId
                 if (args.length < 1) {
                     return message.reply('❌ Usage: `!remove <botId>`\nUse `!status` to see active bots');
                 }
@@ -145,8 +133,25 @@ client.on('messageCreate', async (message) => {
                 break;
             }
             
+            case 'forcemsg': {
+                // !forcemsg botId targetPlayer
+                if (args.length < 2) {
+                    return message.reply('❌ Usage: `!forcemsg <botId> <targetPlayer>`\nExample: `!forcemsg bot_1234 Notch`');
+                }
+                
+                const botId = args[0];
+                const target = args[1];
+                
+                try {
+                    await callBotAPI('/forcemsg', { username: botId, target: target });
+                    await message.reply(`✅ Force sent message to **${target}** from **${botId}**`);
+                } catch (error) {
+                    await message.reply(`❌ Error: ${error.message}`);
+                }
+                break;
+            }
+            
             case 'chat': {
-                // !chat botId message
                 if (args.length < 2) {
                     return message.reply('❌ Usage: `!chat <botId> <message>`');
                 }
@@ -165,7 +170,6 @@ client.on('messageCreate', async (message) => {
             
             case 'cmd':
             case 'command': {
-                // !cmd botId /command
                 if (args.length < 2) {
                     return message.reply('❌ Usage: `!cmd <botId> <command>`');
                 }
@@ -186,14 +190,12 @@ client.on('messageCreate', async (message) => {
             }
             
             case 'status': {
-                // !status
                 try {
                     const response = await axios.get(`${BOT_API_URL}/status`, { 
                         timeout: 10000,
                         headers: { 'Accept': 'application/json' }
                     });
                     
-                    // Check if response has the expected structure
                     if (!response.data) {
                         return message.reply('❌ Invalid response from bot server');
                     }
@@ -210,19 +212,18 @@ client.on('messageCreate', async (message) => {
                         .setDescription(`${count} bot${count !== 1 ? 's' : ''} online on DonutSMP`)
                         .setTimestamp();
                     
-                    // Safely iterate over bots
                     if (Array.isArray(bots)) {
                         bots.forEach((bot, index) => {
                             try {
                                 const status = bot.connected ? '🟢 Online' : '🔴 Offline';
-                                const health = bot.health !== undefined ? `${bot.health}/20` : 'N/A';
-                                const food = bot.food !== undefined ? `${bot.food}/20` : 'N/A';
+                                const queue = bot.queue !== undefined ? `Queue: ${bot.queue}` : '';
+                                const cooldowns = bot.cooldowns !== undefined ? `Cooldowns: ${bot.cooldowns}` : '';
                                 const mcName = bot.mcUsername || bot.username || 'Unknown';
                                 const botId = bot.username || `bot${index + 1}`;
                                 
                                 embed.addFields({
                                     name: `${mcName} (${botId})`,
-                                    value: `${status}\nHealth: ${health} | Food: ${food}`,
+                                    value: `${status}\n${queue} ${cooldowns}`.trim(),
                                     inline: true
                                 });
                             } catch (err) {
@@ -240,7 +241,6 @@ client.on('messageCreate', async (message) => {
             }
             
             case 'list': {
-                // !list - alias for status
                 try {
                     const response = await axios.get(`${BOT_API_URL}/status`, { timeout: 10000 });
                     const { bots = [], count = 0 } = response.data;
@@ -254,7 +254,8 @@ client.on('messageCreate', async (message) => {
                         const status = bot.connected ? '🟢' : '🔴';
                         const mcName = bot.mcUsername || bot.username || 'Unknown';
                         const botId = bot.username || `bot${index + 1}`;
-                        botList += `${status} **${mcName}** (ID: \`${botId}\`)\n`;
+                        const queue = bot.queue !== undefined ? ` [Q:${bot.queue}]` : '';
+                        botList += `${status} **${mcName}** (ID: \`${botId}\`)${queue}\n`;
                     });
                     
                     await message.reply(botList);
@@ -272,41 +273,46 @@ client.on('messageCreate', async (message) => {
                     .addFields(
                         { 
                             name: '!add <token>', 
-                            value: '**Start a bot with session token**\nFormat: `email:password:jwt_token`\n⚠️ Message will be deleted for security\n\nExample:\n`!add user@gmail.com:pass:eyJraWQi...`',
+                            value: '**Start a bot**\nFormat: `email:password:jwt_token`\n⚠️ Message deleted for security\n\nExample:\n`!add user@gmail.com:pass:eyJraWQi...`',
                             inline: false
                         },
                         { 
                             name: '!remove <botId>', 
-                            value: 'Stop a running bot\nExample: `!remove bot_1234`',
+                            value: 'Stop a bot\nExample: `!remove bot_1234`',
+                            inline: false
+                        },
+                        { 
+                            name: '!forcemsg <botId> <player>', 
+                            value: '**Force send message to a player**\nExample: `!forcemsg bot_1234 Notch`',
                             inline: false
                         },
                         { 
                             name: '!chat <botId> <message>', 
-                            value: 'Send a chat message as the bot\nExample: `!chat bot_1234 Hello world!`',
+                            value: 'Send chat message\nExample: `!chat bot_1234 Hello!`',
                             inline: false
                         },
                         { 
                             name: '!cmd <botId> <command>', 
-                            value: 'Execute a command as the bot\nExample: `!cmd bot_1234 /spawn`',
+                            value: 'Execute command\nExample: `!cmd bot_1234 /spawn`',
                             inline: false
                         },
                         { 
                             name: '!status', 
-                            value: 'View all active bots and their status',
+                            value: 'View all active bots',
                             inline: false
                         },
                         { 
                             name: '!list', 
-                            value: 'Simple list of active bots',
+                            value: 'Simple bot list',
                             inline: false
                         },
                         { 
                             name: '!ping', 
-                            value: 'Check bot latency',
+                            value: 'Check latency',
                             inline: false
                         }
                     )
-                    .setFooter({ text: 'Bot Manager v2.0 | DonutSMP' })
+                    .setFooter({ text: 'Auto-Message Bot | DonutSMP' })
                     .setTimestamp();
                 
                 await message.reply({ embeds: [embed] });
@@ -323,9 +329,8 @@ client.on('messageCreate', async (message) => {
             }
             
             default: {
-                // Unknown command - suggest help
                 if (command.length > 0) {
-                    await message.reply('❌ Unknown command. Use `!help` for a list of commands.');
+                    await message.reply('❌ Unknown command. Use `!help` for commands.');
                 }
             }
         }
@@ -339,7 +344,6 @@ client.on('messageCreate', async (message) => {
     }
 });
 
-// Measure API latency
 async function measureApiLatency() {
     const start = Date.now();
     try {
@@ -350,7 +354,6 @@ async function measureApiLatency() {
     }
 }
 
-// Error handling
 client.on('error', error => {
     console.error('Discord client error:', error);
 });
@@ -363,7 +366,6 @@ process.on('uncaughtException', error => {
     console.error('Uncaught exception:', error);
 });
 
-// Login
 client.login(DISCORD_TOKEN)
     .then(() => {
         console.log('🚀 Discord bot starting...');
