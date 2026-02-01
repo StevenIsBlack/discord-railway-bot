@@ -147,7 +147,7 @@ client.on('interactionCreate', async interaction => {
                 const embed = new EmbedBuilder()
                     .setColor(0x0099ff)
                     .setTitle('🌐 Visit Our Website')
-                    .setDescription('[Click here to visit DonutMarket](https://www.donutmarket.eu/)')
+                    .setDescription('[Click here to visit our website](https://www.donutmarket.eu/)')
                     .setFooter({ text: 'DonutMarket.eu' })
                     .setTimestamp();
                 
@@ -159,7 +159,7 @@ client.on('interactionCreate', async interaction => {
                 const embed = new EmbedBuilder()
                     .setColor(0xffd700)
                     .setTitle('🎁 Rewards Program')
-                    .setDescription(`Thank you for inviting! Claim your rewards in <#1447280588842336368>`)
+                    .setDescription(`Thank you for inviting! Please vouch at <#1447280588842336368>`)
                     .setFooter({ text: 'Invite friends to earn more!' })
                     .setTimestamp();
                 
