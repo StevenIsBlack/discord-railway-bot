@@ -159,7 +159,7 @@ client.on('interactionCreate', async interaction => {
                 const embed = new EmbedBuilder()
                     .setColor(0xffd700)
                     .setTitle('🎁 Rewards Program')
-                    .setDescription(`Thank you for inviting! Claim your rewards in <#1447280588842336368>`)
+                    .setDescription(`Thank you for inviting! Please leave a vouch at <#1447280588842336368>`)
                     .setFooter({ text: 'Invite friends to earn more!' })
                     .setTimestamp();
                 
