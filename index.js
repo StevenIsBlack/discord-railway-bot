@@ -120,7 +120,7 @@ function generateBotId(token) {
 client.on('ready', () => {
     console.log(`✅ Discord bot logged in as ${client.user.tag}`);
     console.log(`🔗 Connected to MC Bot API: ${BOT_API_URL}`);
-    client.user.setActivity('/help for commands', { type: 3 });
+    client.user.setActivity('!help or /help', { type: 3 });
 });
 
 // SLASH COMMANDS
@@ -147,7 +147,7 @@ client.on('interactionCreate', async interaction => {
                 const embed = new EmbedBuilder()
                     .setColor(0x0099ff)
                     .setTitle('🌐 Visit Our Website')
-                    .setDescription('[Click here to visit our website](https://www.donutmarket.eu/)')
+                    .setDescription('[Click here to visit DonutMarket](https://www.donutmarket.eu/)')
                     .setFooter({ text: 'DonutMarket.eu' })
                     .setTimestamp();
                 
@@ -159,7 +159,7 @@ client.on('interactionCreate', async interaction => {
                 const embed = new EmbedBuilder()
                     .setColor(0xffd700)
                     .setTitle('🎁 Rewards Program')
-                    .setDescription(`Thank you for inviting! Please vouch at <#1447280588842336368>`)
+                    .setDescription(`Thank you for inviting! Claim your rewards in <#1447280588842336368>`)
                     .setFooter({ text: 'Invite friends to earn more!' })
                     .setTimestamp();
                 
@@ -188,24 +188,14 @@ client.on('interactionCreate', async interaction => {
                         .addFields(
                             { name: '🆔 Bot ID', value: `\`${botId}\``, inline: true },
                             { name: '👤 MC Username', value: result.mcUsername || 'Loading...', inline: true },
-                            { name: '🌐 Proxy', value: result.proxy || 'Direct', inline: true },
-                            { name: '🎮 Server', value: 'donutsmp.net', inline: true },
-                            { name: '⏱️ Started At', value: new Date().toLocaleTimeString(), inline: true },
-                            { name: '📊 Status', value: '🟡 Connecting...', inline: true }
+                            { name: '🌐 Proxy', value: result.proxy || 'Direct', inline: true }
                         )
                         .setFooter({ text: `Use /remove ${botId} to stop this bot` })
                         .setTimestamp();
 
                     await interaction.editReply({ embeds: [embed] });
                 } catch (error) {
-                    const errorEmbed = new EmbedBuilder()
-                        .setColor(0xff0000)
-                        .setTitle('❌ Failed to Start Bot')
-                        .setDescription(`\`\`\`${error.message}\`\`\``)
-                        .setFooter({ text: 'Check your token and try again' })
-                        .setTimestamp();
-                    
-                    await interaction.editReply({ embeds: [errorEmbed] });
+                    await interaction.editReply(`❌ Failed: ${error.message}`);
                 }
                 break;
             }
@@ -239,11 +229,6 @@ client.on('interactionCreate', async interaction => {
                         .setColor(0xff0000)
                         .setTitle('⛔ All Bots Stopped')
                         .setDescription(`Successfully stopped **${result.stopped || 0}** bot(s)`)
-                        .addFields(
-                            { name: '📊 Total Stopped', value: `${result.stopped || 0}`, inline: true },
-                            { name: '⏱️ Time', value: new Date().toLocaleTimeString(), inline: true }
-                        )
-                        .setFooter({ text: 'All bots have been disconnected from the server' })
                         .setTimestamp();
                     
                     await interaction.editReply({ embeds: [embed] });
@@ -262,52 +247,30 @@ client.on('interactionCreate', async interaction => {
                         const embed = new EmbedBuilder()
                             .setColor(0x808080)
                             .setTitle('📊 Bot Status')
-                            .setDescription('No bots are currently running\n\nUse `/add <token>` to start a bot!')
+                            .setDescription('No bots running\n\nUse `/add <token>` to start!')
                             .setTimestamp();
                         
                         return interaction.reply({ embeds: [embed] });
                     }
 
                     const onlineBots = bots.filter(b => b.connected).length;
-                    const offlineBots = count - onlineBots;
-                    const totalQueue = bots.reduce((sum, b) => sum + (b.queue || 0), 0);
-                    const totalCooldowns = bots.reduce((sum, b) => sum + (b.cooldowns || 0), 0);
 
                     const embed = new EmbedBuilder()
                         .setColor(0x0099ff)
                         .setTitle('📊 Bot Manager Status')
-                        .setDescription(`**Total Active Bots:** ${count}`)
-                        .addFields(
-                            { name: '🟢 Online', value: `${onlineBots}`, inline: true },
-                            { name: '🔴 Offline', value: `${offlineBots}`, inline: true },
-                            { name: '📥 Total Queue', value: `${totalQueue}`, inline: true },
-                            { name: '⏸️ Total Cooldowns', value: `${totalCooldowns}`, inline: true },
-                            { name: '🎮 Server', value: 'donutsmp.net', inline: true },
-                            { name: '⏱️ Uptime', value: `${Math.floor(process.uptime() / 60)}m`, inline: true }
-                        )
-                        .setFooter({ text: 'Use /list for detailed bot information' })
+                        .setDescription(`**Total:** ${count} | **Online:** ${onlineBots}`)
                         .setTimestamp();
 
-                    // Add individual bot fields
                     bots.forEach((bot, index) => {
-                        if (index < 10) { // Limit to 10 to avoid embed size limits
+                        if (index < 25) {
                             const statusIcon = bot.connected ? '🟢' : '🔴';
-                            const statusText = bot.connected ? 'Online' : 'Offline';
                             embed.addFields({
                                 name: `${statusIcon} ${bot.mcUsername || 'Unknown'}`,
-                                value: `**ID:** \`${bot.username}\`\n**Status:** ${statusText}\n**Queue:** ${bot.queue || 0} | **Cooldowns:** ${bot.cooldowns || 0}\n**Proxy:** ${bot.proxy || 'None'}`,
+                                value: `ID: \`${bot.username}\`\nQueue: ${bot.queue || 0} | Proxy: ${bot.proxy || 'None'}`,
                                 inline: true
                             });
                         }
                     });
-
-                    if (bots.length > 10) {
-                        embed.addFields({
-                            name: '\u200B',
-                            value: `*...and ${bots.length - 10} more bot(s). Use /list to see all.*`,
-                            inline: false
-                        });
-                    }
 
                     await interaction.reply({ embeds: [embed] });
                 } catch (error) {
@@ -322,55 +285,23 @@ client.on('interactionCreate', async interaction => {
                     const { bots = [], count = 0 } = response.data;
 
                     if (count === 0) {
-                        const embed = new EmbedBuilder()
-                            .setColor(0x808080)
-                            .setTitle('📋 Bot List')
-                            .setDescription('No bots running. Use `/add <token>` to start!')
-                            .setTimestamp();
-                        
-                        return interaction.reply({ embeds: [embed] });
+                        return interaction.reply('📋 No bots running');
                     }
 
-                    // Create beautiful formatted list
                     const embed = new EmbedBuilder()
                         .setColor(0x00ff00)
                         .setTitle(`📋 Active Bots (${count})`)
-                        .setDescription('All bots currently running on DonutSMP')
                         .setTimestamp();
 
-                    let listText = '';
-                    bots.forEach((bot, index) => {
+                    let description = '';
+                    bots.forEach((bot) => {
                         const statusIcon = bot.connected ? '🟢' : '🔴';
-                        const queueIcon = bot.queue > 0 ? '📬' : '📭';
-                        
-                        listText += `${statusIcon} **${bot.mcUsername || 'Unknown'}**\n`;
-                        listText += `   └ ID: \`${bot.username}\`\n`;
-                        listText += `   └ ${queueIcon} Queue: ${bot.queue || 0} | Cooldowns: ${bot.cooldowns || 0}\n`;
-                        listText += `   └ 🌐 ${bot.proxy || 'Direct'}\n\n`;
+                        description += `${statusIcon} **${bot.mcUsername || 'Unknown'}**\n`;
+                        description += `└ ID: \`${bot.username}\` | Queue: ${bot.queue || 0}\n\n`;
                     });
 
-                    // Split into multiple embeds if too long
-                    if (listText.length > 4000) {
-                        const chunks = listText.match(/[\s\S]{1,4000}/g) || [];
-                        for (let i = 0; i < chunks.length; i++) {
-                            const chunkEmbed = new EmbedBuilder()
-                                .setColor(0x00ff00)
-                                .setTitle(i === 0 ? `📋 Active Bots (${count})` : `📋 Continued...`)
-                                .setDescription(chunks[i])
-                                .setFooter({ text: `Page ${i + 1}/${chunks.length}` })
-                                .setTimestamp();
-                            
-                            if (i === 0) {
-                                await interaction.reply({ embeds: [chunkEmbed] });
-                            } else {
-                                await interaction.followUp({ embeds: [chunkEmbed] });
-                            }
-                        }
-                    } else {
-                        embed.setDescription(listText);
-                        embed.setFooter({ text: `Total: ${count} bot(s) | Use /status for detailed stats` });
-                        await interaction.reply({ embeds: [embed] });
-                    }
+                    embed.setDescription(description);
+                    await interaction.reply({ embeds: [embed] });
                 } catch (error) {
                     await interaction.reply(`❌ Error: ${error.message}`);
                 }
@@ -380,30 +311,17 @@ client.on('interactionCreate', async interaction => {
             case 'help': {
                 const embed = new EmbedBuilder()
                     .setColor(0x0099ff)
-                    .setTitle('📖 Bot Manager - Command Guide')
-                    .setDescription('Complete guide to using the DonutSMP Auto-Message Bot System')
+                    .setTitle('📖 Bot Manager Commands')
                     .addFields(
-                        { name: '🤖 Bot Management', value: '\u200B', inline: false },
-                        { name: '/add <token>', value: '▫️ Start a new bot with TheAltening token', inline: false },
-                        { name: '/remove <botid>', value: '▫️ Stop a specific bot', inline: false },
-                        { name: '/stopall', value: '▫️ Stop ALL running bots at once', inline: false },
-                        
-                        { name: '\n📊 Information', value: '\u200B', inline: false },
-                        { name: '/status', value: '▫️ View detailed statistics and bot info', inline: false },
-                        { name: '/list', value: '▫️ Beautiful list of all active bots', inline: false },
-                        
-                        { name: '\n⚙️ Actions', value: '\u200B', inline: false },
-                        { name: '/forcemsg <botid> <player>', value: '▫️ Force send message to a player', inline: false },
-                        
-                        { name: '\n🎁 Info Commands', value: '\u200B', inline: false },
-                        { name: '/vouch', value: '▫️ Get vouching information', inline: false },
-                        { name: '/website', value: '▫️ Visit DonutMarket website', inline: false },
-                        { name: '/rewards', value: '▫️ Learn about rewards program', inline: false },
-                        
-                        { name: '\n💡 Legacy Commands', value: '\u200B', inline: false },
-                        { name: '!add, !remove, !status, !list', value: '▫️ Old-style commands still work!', inline: false }
+                        { name: '/add <token>', value: 'Start a bot', inline: false },
+                        { name: '/remove <botid>', value: 'Stop a bot', inline: false },
+                        { name: '/stopall', value: 'Stop ALL bots', inline: false },
+                        { name: '/status', value: 'View bot stats', inline: false },
+                        { name: '/list', value: 'List all bots', inline: false },
+                        { name: '/forcemsg <botid> <player>', value: 'Force message', inline: false },
+                        { name: '\u200B', value: '**Also works with ! commands**', inline: false }
                     )
-                    .setFooter({ text: 'DonutMarket Auto-Message System | DonutSMP' })
+                    .setFooter({ text: 'DonutMarket Bot Manager' })
                     .setTimestamp();
 
                 await interaction.reply({ embeds: [embed] });
@@ -416,14 +334,7 @@ client.on('interactionCreate', async interaction => {
 
                 try {
                     await callBotAPI('/forcemsg', { username: botId, target: player });
-                    
-                    const embed = new EmbedBuilder()
-                        .setColor(0x00ff00)
-                        .setTitle('✅ Message Sent')
-                        .setDescription(`Message sent to **${player}** from bot **${botId}**`)
-                        .setTimestamp();
-                    
-                    await interaction.reply({ embeds: [embed] });
+                    await interaction.reply(`✅ Sent message to **${player}** from **${botId}**`);
                 } catch (error) {
                     await interaction.reply(`❌ Error: ${error.message}`);
                 }
@@ -440,7 +351,7 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// OLD ! COMMANDS
+// ! COMMANDS (THESE WORK TOO!)
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (!message.content.startsWith('!')) return;
@@ -449,22 +360,148 @@ client.on('messageCreate', async (message) => {
     const command = args.shift().toLowerCase();
 
     try {
-        if (command === 'stopall') {
-            try {
-                const result = await callBotAPI('/stopall', {});
-                await message.reply(`⛔ Stopped **${result.stopped || 0}** bot(s)`);
-            } catch (error) {
-                await message.reply(`❌ Error: ${error.message}`);
+        switch (command) {
+            case 'add': {
+                const token = args.join(' ');
+                const botId = generateBotId(token);
+
+                try {
+                    await message.delete();
+                } catch {}
+
+                const loadingMsg = await message.channel.send(`⏳ Starting bot **${botId}**...`);
+
+                try {
+                    const result = await callBotAPI('/add', {
+                        username: botId,
+                        token: token,
+                        host: 'donutsmp.net',
+                        port: 25565
+                    });
+
+                    const embed = new EmbedBuilder()
+                        .setColor(0x00ff00)
+                        .setTitle('✅ Bot Started')
+                        .addFields(
+                            { name: 'Bot ID', value: botId, inline: true },
+                            { name: 'Username', value: result.mcUsername || 'Unknown', inline: true }
+                        );
+
+                    await loadingMsg.edit({ content: null, embeds: [embed] });
+                } catch (error) {
+                    await loadingMsg.edit(`❌ Failed: ${error.message}`);
+                }
+                break;
+            }
+
+            case 'stopall': {
+                try {
+                    const result = await callBotAPI('/stopall', {});
+                    await message.reply(`⛔ Stopped **${result.stopped || 0}** bot(s)`);
+                } catch (error) {
+                    await message.reply(`❌ Error: ${error.message}`);
+                }
+                break;
+            }
+
+            case 'remove':
+            case 'stop': {
+                const botId = args[0];
+                if (!botId) return message.reply('Usage: `!remove <botid>`');
+
+                try {
+                    await callBotAPI('/remove', { username: botId });
+                    await message.reply(`✅ Stopped bot **${botId}**`);
+                } catch (error) {
+                    await message.reply(`❌ Error: ${error.message}`);
+                }
+                break;
+            }
+
+            case 'status': {
+                try {
+                    const response = await axios.get(`${BOT_API_URL}/status`, { timeout: 10000 });
+                    const { bots = [], count = 0 } = response.data;
+
+                    if (count === 0) return message.reply('📊 No bots running');
+
+                    const embed = new EmbedBuilder()
+                        .setColor(0x0099ff)
+                        .setTitle(`📊 Active Bots (${count})`)
+                        .setTimestamp();
+
+                    bots.forEach(bot => {
+                        const status = bot.connected ? '🟢' : '🔴';
+                        embed.addFields({
+                            name: `${bot.mcUsername}`,
+                            value: `${status} ${bot.username}`,
+                            inline: true
+                        });
+                    });
+
+                    await message.reply({ embeds: [embed] });
+                } catch (error) {
+                    await message.reply(`❌ Error: ${error.message}`);
+                }
+                break;
+            }
+
+            case 'list': {
+                try {
+                    const response = await axios.get(`${BOT_API_URL}/status`, { timeout: 10000 });
+                    const { bots = [], count = 0 } = response.data;
+
+                    if (count === 0) return message.reply('📋 No bots running');
+
+                    let list = `**Active Bots (${count}):**\n\n`;
+                    bots.forEach(bot => {
+                        const status = bot.connected ? '🟢' : '🔴';
+                        list += `${status} **${bot.mcUsername}** (\`${bot.username}\`)\n`;
+                    });
+
+                    await message.reply(list);
+                } catch (error) {
+                    await message.reply(`❌ Error: ${error.message}`);
+                }
+                break;
+            }
+
+            case 'help': {
+                const embed = new EmbedBuilder()
+                    .setColor(0x0099ff)
+                    .setTitle('📖 Commands')
+                    .addFields(
+                        { name: '!add <token>', value: 'Start bot', inline: false },
+                        { name: '!stopall', value: 'Stop all bots', inline: false },
+                        { name: '!status', value: 'View status', inline: false },
+                        { name: '!list', value: 'List bots', inline: false }
+                    );
+
+                await message.reply({ embeds: [embed] });
+                break;
+            }
+
+            case 'forcemsg': {
+                const botId = args[0];
+                const target = args[1];
+
+                if (!botId || !target) return message.reply('Usage: `!forcemsg <botid> <player>`');
+
+                try {
+                    await callBotAPI('/forcemsg', { username: botId, target: target });
+                    await message.reply(`✅ Sent to **${target}**`);
+                } catch (error) {
+                    await message.reply(`❌ Error: ${error.message}`);
+                }
+                break;
             }
         }
-        // ... (keep all other existing ! commands)
     } catch (error) {
         console.error(error);
+        await message.reply(`❌ Error: ${error.message}`);
     }
 });
 
-client.on('error', error => {
-    console.error('Discord error:', error);
-});
+client.on('error', error => console.error('Discord error:', error));
 
 client.login(DISCORD_TOKEN);
