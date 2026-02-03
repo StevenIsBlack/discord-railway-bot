@@ -71,7 +71,7 @@ client.on('interactionCreate', async interaction => {
     try {
         switch (interaction.commandName) {
             case 'vouch':
-                await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x00ff00).setTitle('⭐ Thank You!').setDescription('Vouch at <#1449355333637115904>').setTimestamp()] });
+                await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x00ff00).setTitle('⭐ Thank You for your purchase!').setDescription('Pelase Vouch at <#1449355333637115904>').setTimestamp()] });
                 break;
 
             case 'website':
@@ -79,7 +79,7 @@ client.on('interactionCreate', async interaction => {
                 break;
 
             case 'rewards':
-                await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xffd700).setTitle('🎁 Rewards').setDescription('Claim at <#1447280588842336368>').setTimestamp()] });
+                await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xffd700).setTitle('🎁 Invite Rewards').setDescription('Thank you for inviting! Please leave a vouch at <#1447280588842336368>').setTimestamp()] });
                 break;
 
             case 'add':
