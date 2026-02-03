@@ -59,7 +59,7 @@ function generateBotId() {
     return 'bot_' + Date.now().toString().slice(-6);
 }
 
-client.on('ready', () => {
+client.on('clientReady', () => {
     console.log(`✅ ${client.user.tag}`);
     client.user.setActivity('!help or /help', { type: 3 });
 });
