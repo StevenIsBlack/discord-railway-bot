@@ -28,7 +28,8 @@ const commands = [
     new SlashCommandBuilder().setName('status').setDescription('Bot status'),
     new SlashCommandBuilder().setName('list').setDescription('List bots'),
     new SlashCommandBuilder().setName('help').setDescription('Show commands'),
-    new SlashCommandBuilder().setName('forcemsg').setDescription('Force message').addStringOption(o => o.setName('botid').setDescription('Bot ID').setRequired(true)).addStringOption(o => o.setName('player').setDescription('Player').setRequired(true)),
+    new SlashCommandBuilder().setName('forcemsg').setDescription('Force ALL bots to message player').addStringOption(o => o.setName('player').setDescription('Player name').setRequired(true)),
+    new SlashCommandBuilder().setName('stopforce').setDescription('Stop force messaging and resume queue'),
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
@@ -36,9 +37,9 @@ const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
 (async () => {
     try {
         await rest.put(Routes.applicationCommands(CLIENT_ID), { body: commands });
-        console.log('✅ Slash commands registered');
+        console.log('✅ Commands registered');
     } catch (error) {
-        console.error('❌ Command registration failed:', error);
+        console.error('❌ Failed:', error);
     }
 })();
 
@@ -59,10 +60,11 @@ function generateBotId() {
 }
 
 client.on('ready', () => {
-    console.log(`✅ Logged in as ${client.user.tag}`);
-    client.user.setActivity('/help', { type: 3 });
+    console.log(`✅ ${client.user.tag}`);
+    client.user.setActivity('!help or /help', { type: 3 });
 });
 
+// SLASH COMMANDS
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
@@ -86,10 +88,10 @@ client.on('interactionCreate', async interaction => {
                 await interaction.deferReply();
                 
                 try {
-                    const result = await callBotAPI('/add', { username: botId, token, host: 'donutsmp.net', port: 25565 });
-                    await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x00ff00).setTitle('✅ Bot Started').addFields({ name: 'Bot ID', value: `\`${botId}\``, inline: true }, { name: 'Username', value: result.mcUsername, inline: true }).setTimestamp()] });
+                    const result = await callBotAPI('/add', { username: botId, token });
+                    await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x00ff00).setTitle('✅ Bot Started').addFields({ name: 'Bot ID', value: `\`${botId}\``, inline: true }, { name: 'Username', value: result.mcUsername || 'Unknown', inline: true }).setTimestamp()] });
                 } catch (error) {
-                    await interaction.editReply(`❌ Failed: ${error.message}`);
+                    await interaction.editReply(`❌ ${error.message}`);
                 }
                 break;
 
@@ -97,9 +99,9 @@ client.on('interactionCreate', async interaction => {
                 const removeId = interaction.options.getString('botid');
                 try {
                     await callBotAPI('/remove', { username: removeId });
-                    await interaction.reply(`✅ Stopped **${removeId}**`);
+                    await interaction.reply(`✅ Stopped ${removeId}`);
                 } catch (error) {
-                    await interaction.reply(`❌ Error: ${error.message}`);
+                    await interaction.reply(`❌ ${error.message}`);
                 }
                 break;
 
@@ -107,9 +109,9 @@ client.on('interactionCreate', async interaction => {
                 await interaction.deferReply();
                 try {
                     const result = await callBotAPI('/stopall', {});
-                    await interaction.editReply(`⛔ Stopped **${result.stopped}** bot(s)`);
+                    await interaction.editReply(`⛔ Stopped ${result.stopped} bot(s)`);
                 } catch (error) {
-                    await interaction.editReply(`❌ Error: ${error.message}`);
+                    await interaction.editReply(`❌ ${error.message}`);
                 }
                 break;
 
@@ -117,10 +119,9 @@ client.on('interactionCreate', async interaction => {
                 try {
                     const response = await axios.get(`${BOT_API_URL}/status`, { timeout: 10000 });
                     const { online = 0, total = 0 } = response.data;
-                    
-                    await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x0099ff).setTitle('📊 Bot Status').setDescription(`**Bots:** ${online}/${total} online`).setTimestamp()] });
+                    await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x0099ff).setTitle('📊 Status').setDescription(`**Bots:** ${online}/${total} online`).setTimestamp()] });
                 } catch (error) {
-                    await interaction.reply(`❌ Error: ${error.message}`);
+                    await interaction.reply(`❌ ${error.message}`);
                 }
                 break;
 
@@ -130,24 +131,40 @@ client.on('interactionCreate', async interaction => {
                     const { online = 0, total = 0 } = response.data;
                     await interaction.reply(`📋 **Bots:** ${online}/${total} online`);
                 } catch (error) {
-                    await interaction.reply(`❌ Error: ${error.message}`);
+                    await interaction.reply(`❌ ${error.message}`);
                 }
                 break;
 
             case 'forcemsg':
-                const botid = interaction.options.getString('botid');
                 const player = interaction.options.getString('player');
+                await interaction.deferReply();
                 
                 try {
-                    await callBotAPI('/forcemsg', { username: botid, target: player });
-                    await interaction.reply(`✅ Sent to **${player}**`);
+                    const result = await callBotAPI('/forcemsg', { target: player });
+                    await interaction.editReply(`✅ **${result.sent}** bot(s) are now force messaging **${player}**\n\nUse \`/stopforce\` to resume normal queue`);
                 } catch (error) {
-                    await interaction.reply(`❌ Error: ${error.message}`);
+                    await interaction.editReply(`❌ ${error.message}`);
+                }
+                break;
+
+            case 'stopforce':
+                try {
+                    const result = await callBotAPI('/stopforce', {});
+                    await interaction.reply(`✅ Stopped force messaging on **${result.stopped}** bot(s) - Queue resumed`);
+                } catch (error) {
+                    await interaction.reply(`❌ ${error.message}`);
                 }
                 break;
 
             case 'help':
-                await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x0099ff).setTitle('📖 Commands').addFields({ name: '/add', value: 'Start bot' }, { name: '/stopall', value: 'Stop all' }, { name: '/status', value: 'View status' }, { name: '/forcemsg', value: 'Force message' }).setTimestamp()] });
+                await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x0099ff).setTitle('📖 Commands').setDescription('Bot manager commands').addFields(
+                    { name: '/add <token>', value: 'Start a bot', inline: false },
+                    { name: '/stopall', value: 'Stop all bots', inline: false },
+                    { name: '/status', value: 'View bot count', inline: false },
+                    { name: '/forcemsg <player>', value: 'ALL bots spam player', inline: false },
+                    { name: '/stopforce', value: 'Stop force & resume queue', inline: false },
+                    { name: '\u200B', value: '**Also works with ! commands**', inline: false }
+                ).setTimestamp()] });
                 break;
         }
     } catch (error) {
@@ -155,4 +172,110 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
+// ! COMMANDS (RESTORED)
+client.on('messageCreate', async (message) => {
+    if (message.author.bot) return;
+    if (!message.content.startsWith('!')) return;
+
+    const args = message.content.slice(1).trim().split(/ +/);
+    const command = args.shift().toLowerCase();
+
+    try {
+        switch (command) {
+            case 'add':
+                const token = args.join(' ');
+                const botId = generateBotId();
+
+                try { await message.delete(); } catch {}
+
+                const loading = await message.channel.send(`⏳ Starting bot...`);
+
+                try {
+                    const result = await callBotAPI('/add', { username: botId, token });
+                    await loading.edit({ content: null, embeds: [new EmbedBuilder().setColor(0x00ff00).setTitle('✅ Bot Started').addFields({ name: 'Bot ID', value: `\`${botId}\``, inline: true }, { name: 'Username', value: result.mcUsername || 'Unknown', inline: true })] });
+                } catch (error) {
+                    await loading.edit(`❌ ${error.message}`);
+                }
+                break;
+
+            case 'stopall':
+                try {
+                    const result = await callBotAPI('/stopall', {});
+                    await message.reply(`⛔ Stopped ${result.stopped} bot(s)`);
+                } catch (error) {
+                    await message.reply(`❌ ${error.message}`);
+                }
+                break;
+
+            case 'remove':
+            case 'stop':
+                const removeId = args[0];
+                if (!removeId) return message.reply('Usage: `!remove <botid>`');
+
+                try {
+                    await callBotAPI('/remove', { username: removeId });
+                    await message.reply(`✅ Stopped ${removeId}`);
+                } catch (error) {
+                    await message.reply(`❌ ${error.message}`);
+                }
+                break;
+
+            case 'status':
+                try {
+                    const response = await axios.get(`${BOT_API_URL}/status`, { timeout: 10000 });
+                    const { online = 0, total = 0 } = response.data;
+                    await message.reply({ embeds: [new EmbedBuilder().setColor(0x0099ff).setTitle('📊 Status').setDescription(`**Bots:** ${online}/${total} online`).setTimestamp()] });
+                } catch (error) {
+                    await message.reply(`❌ ${error.message}`);
+                }
+                break;
+
+            case 'list':
+                try {
+                    const response = await axios.get(`${BOT_API_URL}/status`, { timeout: 10000 });
+                    const { online = 0, total = 0 } = response.data;
+                    await message.reply(`📋 **Bots:** ${online}/${total} online`);
+                } catch (error) {
+                    await message.reply(`❌ ${error.message}`);
+                }
+                break;
+
+            case 'forcemsg':
+                const player = args[0];
+                if (!player) return message.reply('Usage: `!forcemsg <player>`');
+
+                try {
+                    const result = await callBotAPI('/forcemsg', { target: player });
+                    await message.reply(`✅ **${result.sent}** bot(s) force messaging **${player}**\n\nUse \`!stopforce\` to stop`);
+                } catch (error) {
+                    await message.reply(`❌ ${error.message}`);
+                }
+                break;
+
+            case 'stopforce':
+                try {
+                    const result = await callBotAPI('/stopforce', {});
+                    await message.reply(`✅ Stopped force on ${result.stopped} bot(s)`);
+                } catch (error) {
+                    await message.reply(`❌ ${error.message}`);
+                }
+                break;
+
+            case 'help':
+                await message.reply({ embeds: [new EmbedBuilder().setColor(0x0099ff).setTitle('📖 Commands').addFields(
+                    { name: '!add <token>', value: 'Start bot' },
+                    { name: '!stopall', value: 'Stop all' },
+                    { name: '!status', value: 'View status' },
+                    { name: '!forcemsg <player>', value: 'Force spam player' },
+                    { name: '!stopforce', value: 'Stop force mode' }
+                )] });
+                break;
+        }
+    } catch (error) {
+        console.error(error);
+        await message.reply(`❌ ${error.message}`);
+    }
+});
+
+client.on('error', console.error);
 client.login(DISCORD_TOKEN);
