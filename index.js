@@ -189,7 +189,7 @@ client.on('interactionCreate', async interaction => {
                         },
                         { 
                             name: '📝 Important Information', 
-                            value: '**💶 Minimum Order:** €5.00\n**🕐 Timezone:** GMT+2\n** \n**📧 Support:** Open a ticket in <#1442921292977279117>', 
+                            value: '**💶 Minimum Order:** €5.00\n**🕐 Timezone:** GMT+2\n** \n📧 **Support:** Open a ticket in <#1442921292977279117>', 
                             inline: false 
                         }
                     )
@@ -250,7 +250,7 @@ client.on('interactionCreate', async interaction => {
             }
 
             case 'vouch': {
-                await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x00ff00).setTitle('⭐ Thank You!').setDescription('Please vouch at <#1449355333637115904>').setTimestamp()] });
+                await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x00ff00).setTitle('⭐ Thank You for your purchase!').setDescription('Please vouch at <#1449355333637115904>').setTimestamp()] });
                 break;
             }
 
@@ -260,7 +260,7 @@ client.on('interactionCreate', async interaction => {
             }
 
             case 'rewards': {
-                await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xffd700).setTitle('🎁 Rewards').setDescription('Claim rewards at <#1447280588842336368>').setTimestamp()] });
+                await interaction.reply({ embeds: [new EmbedBuilder().setColor(0xffd700).setTitle('🎁 Rewards').setDescription('Thank you for inviting! Please leave a vouch at <#1447280588842336368>').setTimestamp()] });
                 break;
             }
 
