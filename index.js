@@ -160,7 +160,7 @@ client.on('interactionCreate', async interaction => {
                 const embed = new EmbedBuilder()
                     .setColor(0x4ecdc4)
                     .setTitle('💰 DonutMarket Prices')
-                    .setDescription('**Premium Quality • Instant Delivery • Trusted Service**')
+                    .setDescription('** • DonutMarket trusted Service**')
                     .addFields(
                         { 
                             name: '💀 Skeleton Spawner Prices', 
@@ -189,7 +189,7 @@ client.on('interactionCreate', async interaction => {
                         },
                         { 
                             name: '📝 Important Information', 
-                            value: '**💶 Minimum Order:** €5.00\n**🕐 Timezone:** GMT+2\n**🎫 Payment:** Use `/payment` to see payment methods\n**📧 Support:** Open a ticket in <#1442921292977279117>', 
+                            value: '**💶 Minimum Order:** €5.00\n**🕐 Timezone:** GMT+2\n**🎫** `\n**📧 Support:** Open a ticket in <#1442921292977279117>', 
                             inline: false 
                         }
                     )
