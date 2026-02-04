@@ -189,7 +189,7 @@ client.on('interactionCreate', async interaction => {
                         },
                         { 
                             name: '📝 Important Information', 
-                            value: '**💶 Minimum Order:** €5.00\n**🕐 Timezone:** GMT+2\n** \n📧 **Support:** Open a ticket in <#1442921292977279117>', 
+                            value: '**💶 Minimum Order:** €5.00\n**🕐 Timezone:** GMT+2\n** \n📧 Support: Open a ticket in <#1442921292977279117>', 
                             inline: false 
                         }
                     )
