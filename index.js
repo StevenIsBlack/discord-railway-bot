@@ -25,6 +25,8 @@ const commands = [
     new SlashCommandBuilder().setName('rules').setDescription('📜 View server rules'),
     new SlashCommandBuilder().setName('prices').setDescription('💰 View our prices'),
     new SlashCommandBuilder().setName('payment').setDescription('💳 View payment methods'),
+    new SlashCommandBuilder().setName('sell').setDescription('💸 Sell to us'),
+    new SlashCommandBuilder().setName('domain').setDescription('🌐 Website information'),
     new SlashCommandBuilder().setName('add').setDescription('Add bot').addStringOption(o => o.setName('token').setDescription('Token').setRequired(true)),
     new SlashCommandBuilder().setName('remove').setDescription('Remove bot').addStringOption(o => o.setName('botid').setDescription('Bot ID').setRequired(true)),
     new SlashCommandBuilder().setName('stopall').setDescription('Stop all bots'),
@@ -72,6 +74,74 @@ client.on('interactionCreate', async interaction => {
 
     try {
         switch (interaction.commandName) {
+            case 'sell': {
+                const embed = new EmbedBuilder()
+                    .setColor(0xf39c12)
+                    .setTitle('💸 Sell to Us')
+                    .setDescription('**We buy your items at competitive rates!**')
+                    .addFields(
+                        { 
+                            name: '💀 Skeleton Spawner Prices', 
+                            value: '```\n1 Spawner = €0.06```', 
+                            inline: false 
+                        },
+                        { 
+                            name: '💵 Money Prices', 
+                            value: '```\n1M = €0.03```', 
+                            inline: false 
+                        },
+                        { 
+                            name: '\u200B', 
+                            value: '━━━━━━━━━━━━━━━━━━━━━━━━━━', 
+                            inline: false 
+                        },
+                        { 
+                            name: '📩 How to Sell', 
+                            value: 'Create a ticket in <#1442921292977279117> to sell your items!', 
+                            inline: false 
+                        }
+                    )
+                    .setFooter({ text: 'DonutMarket • Fast & Fair Payments' })
+                    .setTimestamp();
+
+                await interaction.reply({ embeds: [embed] });
+                break;
+            }
+
+            case 'domain': {
+                const embed = new EmbedBuilder()
+                    .setColor(0x3498db)
+                    .setTitle('🌐 Website Information')
+                    .setDescription('**Important Purchase Information**')
+                    .addFields(
+                        { 
+                            name: '💰 In-Game Currency Purchases', 
+                            value: '> If you purchase in-game currency from our website, there is no need to create a ticket. The money will be paid out instantly or as soon as we are available.', 
+                            inline: false 
+                        },
+                        { 
+                            name: '🎁 Spawners & Elytras', 
+                            value: '> If you purchase spawners or elytras, you must create a ticket and include your in-game name. We will then give you your items immediately or when we are available.', 
+                            inline: false 
+                        },
+                        { 
+                            name: '\u200B', 
+                            value: '━━━━━━━━━━━━━━━━━━━━━━━━━━', 
+                            inline: false 
+                        },
+                        { 
+                            name: '🔗 Visit Our Website', 
+                            value: '**[https://www.donutmarket.eu/](https://www.donutmarket.eu/)**', 
+                            inline: false 
+                        }
+                    )
+                    .setFooter({ text: 'DonutMarket • Instant Delivery' })
+                    .setTimestamp();
+
+                await interaction.reply({ embeds: [embed] });
+                break;
+            }
+
             case 'rules': {
                 const embed = new EmbedBuilder()
                     .setColor(0xff6b6b)
@@ -347,7 +417,7 @@ client.on('interactionCreate', async interaction => {
 
             case 'help': {
                 await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x0099ff).setTitle('📖 Bot Commands').setDescription('All available commands').addFields(
-                    { name: '🛒 Shop Commands', value: '`/rules` • `/prices` • `/payment` • `/website`', inline: false },
+                    { name: '🛒 Shop Commands', value: '`/rules` • `/prices` • `/payment` • `/sell` • `/domain` • `/website`', inline: false },
                     { name: '🤖 Bot Management', value: '`/add` • `/remove` • `/stopall` • `/status` • `/list`', inline: false },
                     { name: '🎯 Advanced', value: '`/forcemsg` • `/stopforce`', inline: false },
                     { name: '📢 Info', value: '`/vouch` • `/rewards` • `/help`', inline: false }
@@ -369,7 +439,7 @@ client.on('messageCreate', async (message) => {
     const command = args.shift().toLowerCase();
 
     try {
-        if (['rules', 'prices', 'payment'].includes(command)) {
+        if (['rules', 'prices', 'payment', 'sell', 'domain'].includes(command)) {
             await message.reply(`Please use: \`/${command}\``);
             return;
         }
