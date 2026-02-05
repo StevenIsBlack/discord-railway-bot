@@ -99,9 +99,14 @@ client.on('interactionCreate', async interaction => {
                             name: '📩 How to Sell', 
                             value: 'Create a ticket in <#1442921292977279117> to sell your items!', 
                             inline: false 
+                        },
+                        { 
+                            name: '\u200B', 
+                            value: '🌐 **[Visit DonutMarket](https://www.donutmarket.eu/)**', 
+                            inline: false 
                         }
                     )
-                    .setFooter({ text: 'DonutMarket • Fast & Fair Payments' })
+                    .setFooter({ text: 'Fast & Fair Payments' })
                     .setTimestamp();
 
                 await interaction.reply({ embeds: [embed] });
@@ -135,7 +140,7 @@ client.on('interactionCreate', async interaction => {
                             inline: false 
                         }
                     )
-                    .setFooter({ text: 'DonutMarket • Instant Delivery' })
+                    .setFooter({ text: 'Instant Delivery' })
                     .setTimestamp();
 
                 await interaction.reply({ embeds: [embed] });
@@ -219,7 +224,7 @@ client.on('interactionCreate', async interaction => {
                             inline: false 
                         }
                     )
-                    .setFooter({ text: 'DonutMarket • Thank you for following the rules!' })
+                    .setFooter({ text: 'Thank you for following the rules!' })
                     .setTimestamp();
 
                 await interaction.reply({ embeds: [embed] });
@@ -230,7 +235,7 @@ client.on('interactionCreate', async interaction => {
                 const embed = new EmbedBuilder()
                     .setColor(0x4ecdc4)
                     .setTitle('💰 DonutMarket Prices')
-                    .setDescription('** • DonutMarket trusted Service**')
+                    .setDescription('**DonutMarket • Trusted Service**')
                     .addFields(
                         { 
                             name: '💀 Skeleton Spawner Prices', 
@@ -259,11 +264,11 @@ client.on('interactionCreate', async interaction => {
                         },
                         { 
                             name: '📝 Important Information', 
-                            value: '**💶 Minimum Order:** €5.00\n**🕐 Timezone:** GMT+2\n \n📧 Support: Open a ticket in <#1442921292977279117>', 
+                            value: '**💶 Minimum Order:** €5.00\n**🕐 Timezone:** GMT+2\n**📧 Support:** Open a ticket in <#1442921292977279117>\n\n🌐 **[Visit DonutMarket](https://www.donutmarket.eu/)**', 
                             inline: false 
                         }
                     )
-                    .setFooter({ text: 'DonutMarket • All prices in EUR (€)' })
+                    .setFooter({ text: 'All prices in EUR (€)' })
                     .setTimestamp();
 
                 await interaction.reply({ embeds: [embed] });
@@ -312,7 +317,7 @@ client.on('interactionCreate', async interaction => {
                             inline: false 
                         }
                     )
-                    .setFooter({ text: '🔒 All transactions are safe and secure' })
+                    .setFooter({ text: 'All transactions are safe and secure' })
                     .setTimestamp();
 
                 await interaction.reply({ embeds: [embed] });
