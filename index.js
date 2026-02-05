@@ -114,38 +114,37 @@ client.on('interactionCreate', async interaction => {
             }
 
             case 'domain': {
-    const embed = new EmbedBuilder()
-        .setColor(0x3498db)
-        .setTitle('🌐 Website Information')
-        .setDescription('**Important Purchase Information**')
-        .addFields(
-            { 
-                name: '💰 In-Game Currency Purchases', 
-                value: 'If you purchase in-game currency from our website, there is no need to create a ticket. The money will be paid out instantly or as soon as we are available.', 
-                inline: false 
-            },
-            { 
-                name: '🎁 Spawners & Elytras', 
-                value: 'If you purchase spawners or elytras, you must create a ticket and include your in-game name. We will then give you your items immediately or when we are available.', 
-                inline: false 
-            },
-            { 
-                name: '\u200B', 
-                value: '━━━━━━━━━━━━━━━━━━━━━━━━━━', 
-                inline: false 
-            },
-            { 
-                name: '🔗 Visit Our Website', 
-                value: '[Click here to visit DonutMarket](https://www.donutmarket.eu/)', 
-                inline: false 
-            }
-        )
-        .setFooter({ text: 'Instant Delivery' })
-        .setTimestamp();
+                const embed = new EmbedBuilder()
+                    .setColor(0x3498db)
+                    .setTitle('🌐 Website Information')
+                    .setDescription('**Important Purchase Information**')
+                    .addFields(
+                        { 
+                            name: '💰 In-Game Currency Purchases', 
+                            value: '> If you purchase in-game currency from our website, there is no need to create a ticket. The money will be paid out instantly or as soon as we are available.', 
+                            inline: false 
+                        },
+                        { 
+                            name: '🎁 Spawners & Elytras', 
+                            value: '> If you purchase spawners or elytras, you must create a ticket and include your in-game name. We will then give you your items immediately or when we are available.', 
+                            inline: false 
+                        },
+                        { 
+                            name: '\u200B', 
+                            value: '━━━━━━━━━━━━━━━━━━━━━━━━━━', 
+                            inline: false 
+                        },
+                        { 
+                            name: '🔗 Visit Our Website', 
+                            value: '**[https://www.donutmarket.eu/](https://www.donutmarket.eu/)**', 
+                            inline: false 
+                        }
+                    )
+                    .setFooter({ text: 'Instant Delivery' })
+                    .setTimestamp();
 
-    await interaction.reply({ embeds: [embed] });
-    break;
-}
+                await interaction.reply({ embeds: [embed] });
+                break;
             }
 
             case 'rules': {
