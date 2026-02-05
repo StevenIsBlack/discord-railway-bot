@@ -82,7 +82,7 @@ client.on('interactionCreate', async interaction => {
                     .addFields(
                         { 
                             name: '💀 Skeleton Spawner Prices', 
-                            value: '```\n1 Spawner = €0.06```', 
+                            value: '```\n1 Spawner = €0.11```', 
                             inline: false 
                         },
                         { 
