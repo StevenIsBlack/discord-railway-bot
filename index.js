@@ -136,7 +136,7 @@ client.on('interactionCreate', async interaction => {
                         },
                         { 
                             name: '🔗 Visit Our Website', 
-                            value: '**[https://www.donutmarket.eu/](https://www.donutmarket.eu/)**', 
+                            value: '[https://www.donutmarket.eu/](https://www.donutmarket.eu/)', 
                             inline: false 
                         }
                     )
@@ -239,17 +239,17 @@ client.on('interactionCreate', async interaction => {
                     .addFields(
                         { 
                             name: '💀 Skeleton Spawner Prices', 
-                            value: '```\n1 Spawner = €0.12\n━━━━━━━━━━━━━━━━━\n100 Spawners  → €12.00\n200 Spawners  → €24.00\n400 Spawners  → €48.00\n800 Spawners  → €96.00\n1000 Spawners → €120.00```', 
+                            value: '```\n1 Spawner = €0.23\n━━━━━━━━━━━━━━━━━\n100 Spawners  → €23.00\n200 Spawners  → €46.00\n400 Spawners  → €92.00\n800 Spawners  → €184.00\n1000 Spawners → €230.00```', 
                             inline: false 
                         },
                         { 
                             name: '💵 In-Game Money Prices', 
-                            value: '```\n1M = €0.09\n━━━━━━━━━━━━━━━━━\n100M  → €9.00\n250M  → €22.50\n500M  → €45.00\n750M  → €67.50\n1B    → €90.00```', 
+                            value: '```\n1M = €0.08\n━━━━━━━━━━━━━━━━━\n100M  → €8.00\n250M  → €20\n500M  → €45.00\n750M  → €60.00\n1B    → €80.00```', 
                             inline: false 
                         },
                         { 
                             name: '🦅 Elytra Prices', 
-                            value: '```\n1 Elytra → €30.00```', 
+                            value: '```\n1 Elytra → €40.00```', 
                             inline: true 
                         },
                         { 
