@@ -14,7 +14,8 @@ const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.MessageContent
+        GatewayIntentBits.MessageContent,
+        GatewayIntentBits.GuildModeration
     ]
 });
 
@@ -69,6 +70,54 @@ client.on('ready', () => {
     client.user.setActivity('/help for commands', { type: 3 });
 });
 
+// Anti-link and anti-invite protection
+client.on('messageCreate', async (message) => {
+    // Ignore bots and DMs
+    if (message.author.bot || !message.guild) return;
+    
+    // Skip if user has admin permissions
+    if (message.member?.permissions.has('Administrator')) return;
+    
+    // Skip commands
+    if (message.content.startsWith('!') || message.content.startsWith('/')) return;
+    
+    const content = message.content.toLowerCase();
+    
+    // Check for Discord invites
+    const discordInviteRegex = /(discord\.gg\/|discord\.com\/invite\/|discordapp\.com\/invite\/)/i;
+    
+    // Check for any links (http, https, www)
+    const linkRegex = /(https?:\/\/|www\.)/i;
+    
+    if (discordInviteRegex.test(content)) {
+        try {
+            await message.delete();
+            const warning = await message.channel.send(
+                `🚫 ${message.author}, Discord invites are not allowed in this server!`
+            );
+            setTimeout(() => warning.delete().catch(() => {}), 10000);
+            console.log(`Deleted Discord invite from ${message.author.tag}`);
+        } catch (err) {
+            console.error('Failed to delete invite:', err);
+        }
+        return;
+    }
+    
+    if (linkRegex.test(content)) {
+        try {
+            await message.delete();
+            const warning = await message.channel.send(
+                `🚫 ${message.author}, links are not allowed!`
+            );
+            setTimeout(() => warning.delete().catch(() => {}), 10000);
+            console.log(`Deleted link from ${message.author.tag}`);
+        } catch (err) {
+            console.error('Failed to delete link:', err);
+        }
+        return;
+    }
+});
+
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand()) return;
 
@@ -80,72 +129,34 @@ client.on('interactionCreate', async interaction => {
                     .setTitle('💸 Sell to Us')
                     .setDescription('**We buy your items at competitive rates!**')
                     .addFields(
-                        { 
-                            name: '💀 Skeleton Spawner Prices', 
-                            value: '```\n1 Spawner = €0.11```', 
-                            inline: false 
-                        },
-                        { 
-                            name: '💵 Money Prices', 
-                            value: '```\n1M = €0.03```', 
-                            inline: false 
-                        },
-                        { 
-                            name: '\u200B', 
-                            value: '━━━━━━━━━━━━━━━━━━━━━━━━━━', 
-                            inline: false 
-                        },
-                        { 
-                            name: '📩 How to Sell', 
-                            value: 'Create a ticket in <#1442921292977279117> to sell your items!', 
-                            inline: false 
-                        },
-                        { 
-                            name: '\u200B', 
-                            value: '🌐 **[Visit DonutMarket](https://www.donutmarket.eu/)**', 
-                            inline: false 
-                        }
+                        { name: '💀 Skeleton Spawner Prices', value: '```\n1 Spawner = €0.11```', inline: false },
+                        { name: '💵 Money Prices', value: '```\n1M = €0.03```', inline: false },
+                        { name: '\u200B', value: '━━━━━━━━━━━━━━━━━━━━━━━━━━', inline: false },
+                        { name: '📩 How to Sell', value: 'Create a ticket in <#1442921292977279117> to sell your items!', inline: false },
+                        { name: '\u200B', value: '🌐 **[Visit DonutMarket](https://www.donutmarket.eu/)**', inline: false }
                     )
                     .setFooter({ text: 'Fast & Fair Payments' })
                     .setTimestamp();
-
                 await interaction.reply({ embeds: [embed] });
                 break;
             }
 
             case 'domain': {
-    const embed = new EmbedBuilder()
-        .setColor(0x3498db)
-        .setTitle('🌐 Website Information')
-        .setDescription('**Important Purchase Information**')
-        .addFields(
-            { 
-                name: '💰 In-Game Currency Purchases', 
-                value: 'If you purchase in-game currency from our website, there is no need to create a ticket. The money will be paid out instantly or as soon as we are available.', 
-                inline: false 
-            },
-            { 
-                name: '🎁 Spawners & Elytras', 
-                value: 'If you purchase spawners or elytras, you must create a ticket and include your in-game name. We will then give you your items immediately or when we are available.', 
-                inline: false 
-            },
-            { 
-                name: '\u200B', 
-                value: '━━━━━━━━━━━━━━━━━━━━━━━━━━', 
-                inline: false 
-            },
-            { 
-                name: '🔗 Visit Our Website', 
-                value: '[Click here to visit DonutMarket](https://www.donutmarket.eu/)', 
-                inline: false 
+                const embed = new EmbedBuilder()
+                    .setColor(0x3498db)
+                    .setTitle('🌐 Website Information')
+                    .setDescription('**Important Purchase Information**')
+                    .addFields(
+                        { name: '💰 In-Game Currency Purchases', value: 'If you purchase in-game currency from our website, there is no need to create a ticket. The money will be paid out instantly or as soon as we are available.', inline: false },
+                        { name: '🎁 Spawners & Elytras', value: 'If you purchase spawners or elytras, you must create a ticket and include your in-game name. We will then give you your items immediately or when we are available.', inline: false },
+                        { name: '\u200B', value: '━━━━━━━━━━━━━━━━━━━━━━━━━━', inline: false },
+                        { name: '🔗 Visit Our Website', value: '[Click here to visit DonutMarket](https://www.donutmarket.eu/)', inline: false }
+                    )
+                    .setFooter({ text: 'Instant Delivery' })
+                    .setTimestamp();
+                await interaction.reply({ embeds: [embed] });
+                break;
             }
-        )
-        .setFooter({ text: 'Instant Delivery' })
-        .setTimestamp();
-
-    await interaction.reply({ embeds: [embed] });
-    break;
-}
 
             case 'rules': {
                 const embed = new EmbedBuilder()
@@ -153,80 +164,23 @@ client.on('interactionCreate', async interaction => {
                     .setTitle('📜 Server Rules')
                     .setDescription('**Please follow all the rules listed below**')
                     .addFields(
-                        { 
-                            name: '🌍 Rule 1: English Only', 
-                            value: 'All text channels are English only. Mods must be able to read all messages clearly.', 
-                            inline: false 
-                        },
-                        { 
-                            name: '💬 Rule 2: Stay On Topic', 
-                            value: 'Keep all discussion civil and in the correct channels. Mods may ask you to move your conversation.', 
-                            inline: false 
-                        },
-                        { 
-                            name: '🤝 Rule 3: No Inappropriate Language', 
-                            value: 'Remain respectful of others at all times.', 
-                            inline: false 
-                        },
-                        { 
-                            name: '🚫 Rule 4: No Personal Drama', 
-                            value: 'Keep personal drama out of chat.', 
-                            inline: false 
-                        },
-                        { 
-                            name: '👤 Rule 5: No Impersonation', 
-                            value: 'Do not impersonate other users, moderators, and/or famous personalities.', 
-                            inline: false 
-                        },
-                        { 
-                            name: '📢 Rule 6: No Spamming', 
-                            value: 'Do not flood chat rooms with messages. Encouraging others to spam is also not allowed.', 
-                            inline: false 
-                        },
-                        { 
-                            name: '🔞 Rule 7: No NSFW Content', 
-                            value: 'Do not post or have conversations around NSFW content.', 
-                            inline: false 
-                        },
-                        { 
-                            name: '🎨 Rule 8: Appropriate Profiles', 
-                            value: 'No inappropriate or offensive usernames, status, or profile pictures. You may be asked to change these.', 
-                            inline: false 
-                        },
-                        { 
-                            name: '🚷 Rule 9: No Self-Promotion', 
-                            value: 'No self-promotion, soliciting, or advertising. This also includes user DMs.', 
-                            inline: false 
-                        },
-                        { 
-                            name: '🔗 Rule 10: No Malicious Links', 
-                            value: 'Any link that tracks IP addresses or leads to malicious websites will be removed.', 
-                            inline: false 
-                        },
-                        { 
-                            name: '🛡️ Rule 11: Don\'t Evade Filters', 
-                            value: 'This applies to both words and links. If something is censored, it\'s censored for a reason!', 
-                            inline: false 
-                        },
-                        { 
-                            name: '📋 Rule 12: Follow Discord ToS', 
-                            value: '[Terms of Service](https://discordapp.com/terms) • [Community Guidelines](https://discord.com/guidelines)', 
-                            inline: false 
-                        },
-                        { 
-                            name: '👮 Rule 13: Moderators Hold Final Say', 
-                            value: 'Listen to and respect the volunteers that keep this server running.', 
-                            inline: false 
-                        },
-                        { 
-                            name: '🔕 Rule 14: Don\'t Ping Staff', 
-                            value: 'Do not mention staff or owners unnecessarily.', 
-                            inline: false 
-                        }
+                        { name: '🌍 Rule 1: English Only', value: 'All text channels are English only. Mods must be able to read all messages clearly.', inline: false },
+                        { name: '💬 Rule 2: Stay On Topic', value: 'Keep all discussion civil and in the correct channels. Mods may ask you to move your conversation.', inline: false },
+                        { name: '🤝 Rule 3: No Inappropriate Language', value: 'Remain respectful of others at all times.', inline: false },
+                        { name: '🚫 Rule 4: No Personal Drama', value: 'Keep personal drama out of chat.', inline: false },
+                        { name: '👤 Rule 5: No Impersonation', value: 'Do not impersonate other users, moderators, and/or famous personalities.', inline: false },
+                        { name: '📢 Rule 6: No Spamming', value: 'Do not flood chat rooms with messages. Encouraging others to spam is also not allowed.', inline: false },
+                        { name: '🔞 Rule 7: No NSFW Content', value: 'Do not post or have conversations around NSFW content.', inline: false },
+                        { name: '🎨 Rule 8: Appropriate Profiles', value: 'No inappropriate or offensive usernames, status, or profile pictures. You may be asked to change these.', inline: false },
+                        { name: '🚷 Rule 9: No Self-Promotion', value: 'No self-promotion, soliciting, or advertising. This also includes user DMs.', inline: false },
+                        { name: '🔗 Rule 10: No Malicious Links', value: 'Any link that tracks IP addresses or leads to malicious websites will be removed.', inline: false },
+                        { name: '🛡️ Rule 11: Don\'t Evade Filters', value: 'This applies to both words and links. If something is censored, it\'s censored for a reason!', inline: false },
+                        { name: '📋 Rule 12: Follow Discord ToS', value: '[Terms of Service](https://discordapp.com/terms) • [Community Guidelines](https://discord.com/guidelines)', inline: false },
+                        { name: '👮 Rule 13: Moderators Hold Final Say', value: 'Listen to and respect the volunteers that keep this server running.', inline: false },
+                        { name: '🔕 Rule 14: Don\'t Ping Staff', value: 'Do not mention staff or owners unnecessarily.', inline: false }
                     )
                     .setFooter({ text: 'Thank you for following the rules!' })
                     .setTimestamp();
-
                 await interaction.reply({ embeds: [embed] });
                 break;
             }
@@ -237,40 +191,15 @@ client.on('interactionCreate', async interaction => {
                     .setTitle('💰 DonutMarket Prices')
                     .setDescription('**DonutMarket • Trusted Service**')
                     .addFields(
-                        { 
-                            name: '💀 Skeleton Spawner Prices', 
-                            value: '```\n1 Spawner = €0.23\n━━━━━━━━━━━━━━━━━\n100 Spawners  → €23.00\n200 Spawners  → €46.00\n400 Spawners  → €92.00\n800 Spawners  → €184.00\n1000 Spawners → €230.00```', 
-                            inline: false 
-                        },
-                        { 
-                            name: '💵 In-Game Money Prices', 
-                            value: '```\n1M = €0.08\n━━━━━━━━━━━━━━━━━\n100M  → €8.00\n250M  → €20\n500M  → €45.00\n750M  → €60.00\n1B    → €80.00```', 
-                            inline: false 
-                        },
-                        { 
-                            name: '🦅 Elytra Prices', 
-                            value: '```\n1 Elytra → €40.00```', 
-                            inline: true 
-                        },
-                        { 
-                            name: '🎮 Minecraft Account', 
-                            value: '```\nJava & Bedrock → €15.00```', 
-                            inline: true 
-                        },
-                        { 
-                            name: '\u200B', 
-                            value: '━━━━━━━━━━━━━━━━━━━━━━━━━━', 
-                            inline: false 
-                        },
-                        { 
-                            name: '📝 Important Information', 
-                            value: '**💶 Minimum Order:** €5.00\n**🕐 Timezone:** GMT+2\n**📧 Support:** Open a ticket in <#1442921292977279117>\n\n🌐 **[Visit DonutMarket](https://www.donutmarket.eu/)**', 
-                            inline: false 
-                        }
+                        { name: '💀 Skeleton Spawner Prices', value: '```\n1 Spawner = €0.23\n━━━━━━━━━━━━━━━━━\n100 Spawners  → €23.00\n200 Spawners  → €46.00\n400 Spawners  → €92.00\n800 Spawners  → €184.00\n1000 Spawners → €230.00```', inline: false },
+                        { name: '💵 In-Game Money Prices', value: '```\n1M = €0.08\n━━━━━━━━━━━━━━━━━\n100M  → €8.00\n250M  → €20.00\n500M  → €40.00\n750M  → €60.00\n1B    → €80.00```', inline: false },
+                        { name: '🦅 Elytra Prices', value: '```\n1 Elytra → €40.00```', inline: true },
+                        { name: '🎮 Minecraft Account', value: '```\nJava & Bedrock → €15.00```', inline: true },
+                        { name: '\u200B', value: '━━━━━━━━━━━━━━━━━━━━━━━━━━', inline: false },
+                        { name: '📝 Important Information', value: '**💶 Minimum Order:** €5.00\n**🕐 Timezone:** GMT+2\n**📧 Support:** Open a ticket in <#1442921292977279117>\n\n🌐 **[Visit DonutMarket](https://www.donutmarket.eu/)**', inline: false }
                     )
                     .setFooter({ text: 'All prices in EUR (€)' })
                     .setTimestamp();
-
                 await interaction.reply({ embeds: [embed] });
                 break;
             }
@@ -281,45 +210,16 @@ client.on('interactionCreate', async interaction => {
                     .setTitle('💳 Payment Methods')
                     .setDescription('**Choose your preferred payment method**')
                     .addFields(
-                        { 
-                            name: '🌐 Website Purchases', 
-                            value: '**Supports almost all payment methods**\n\n✅ Credit/Debit Cards\n✅ PayPal\n✅ Crypto\n✅ Local Payment Methods\n\n⚠️ *A small service fee is included in website prices*\n\n🔗 **[Visit Website](https://www.donutmarket.eu/)**', 
-                            inline: false 
-                        },
-                        { 
-                            name: '💬 Discord Purchases', 
-                            value: '**PayPal Friends & Family**\n\n✅ **No fees** when buying through Discord\n✅ Instant delivery\n✅ Direct support from our team\n\n📩 **How to purchase:**\nOpen a ticket in <#1442921292977279117> and our team will help you out!', 
-                            inline: false 
-                        },
-                        { 
-                            name: '\u200B', 
-                            value: '━━━━━━━━━━━━━━━━━━━━━━━━━━', 
-                            inline: false 
-                        },
-                        { 
-                            name: '💡 Why Buy Through Discord?', 
-                            value: '🚀 Faster processing\n💰 No extra fees\n🛡️ Direct support\n✨ Better communication', 
-                            inline: true 
-                        },
-                        { 
-                            name: '⏱️ Processing Time', 
-                            value: '⚡ Usually **5-30 minutes**\n🌙 May vary during off-hours\n📍 Timezone: **GMT+2**', 
-                            inline: true 
-                        },
-                        { 
-                            name: '\u200B', 
-                            value: '\u200B', 
-                            inline: false 
-                        },
-                        { 
-                            name: '❤️ Thank You!', 
-                            value: 'Thank you for supporting the server!', 
-                            inline: false 
-                        }
+                        { name: '🌐 Website Purchases', value: '**Supports almost all payment methods**\n\n✅ Credit/Debit Cards\n✅ PayPal\n✅ Crypto\n✅ Local Payment Methods\n\n⚠️ *A small service fee is included in website prices*\n\n🔗 **[Visit Website](https://www.donutmarket.eu/)**', inline: false },
+                        { name: '💬 Discord Purchases', value: '**PayPal Friends & Family**\n\n✅ **No fees** when buying through Discord\n✅ Instant delivery\n✅ Direct support from our team\n\n📩 **How to purchase:**\nOpen a ticket in <#1442921292977279117> and our team will help you out!', inline: false },
+                        { name: '\u200B', value: '━━━━━━━━━━━━━━━━━━━━━━━━━━', inline: false },
+                        { name: '💡 Why Buy Through Discord?', value: '🚀 Faster processing\n💰 No extra fees\n🛡️ Direct support\n✨ Better communication', inline: true },
+                        { name: '⏱️ Processing Time', value: '⚡ Usually **5-30 minutes**\n🌙 May vary during off-hours\n📍 Timezone: **GMT+2**', inline: true },
+                        { name: '\u200B', value: '\u200B', inline: false },
+                        { name: '❤️ Thank You!', value: 'Thank you for supporting the server!', inline: false }
                     )
                     .setFooter({ text: 'All transactions are safe and secure' })
                     .setTimestamp();
-
                 await interaction.reply({ embeds: [embed] });
                 break;
             }
@@ -343,7 +243,6 @@ client.on('interactionCreate', async interaction => {
                 const token = interaction.options.getString('token');
                 const botId = generateBotId();
                 await interaction.deferReply();
-                
                 try {
                     const result = await callBotAPI('/add', { username: botId, token });
                     await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x00ff00).setTitle('✅ Bot Started').addFields({ name: 'Bot ID', value: `\`${botId}\``, inline: true }, { name: 'Username', value: result.mcUsername || 'Unknown', inline: true }).setTimestamp()] });
@@ -400,7 +299,6 @@ client.on('interactionCreate', async interaction => {
             case 'forcemsg': {
                 const player = interaction.options.getString('player');
                 await interaction.deferReply();
-                
                 try {
                     const result = await callBotAPI('/forcemsg', { target: player });
                     await interaction.editReply(`✅ **${result.sent}** bot(s) force messaging **${player}**\n\nUse \`/stopforce\` to stop`);
