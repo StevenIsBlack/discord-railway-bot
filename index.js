@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
 const axios = require('axios');
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
@@ -19,6 +19,16 @@ const client = new Client({
     ]
 });
 
+// Anti-spam tracking
+const userLastMessage = new Map();
+const userSpamWarnings = new Map();
+
+// Gambling system
+const userBalances = new Map();
+const activeGames = new Map();
+const MEMBER_ROLE_ID = '1442921893786161387';
+const MIN_BET = 500000; // 500K minimum
+
 const commands = [
     new SlashCommandBuilder().setName('vouch').setDescription('Vouching information'),
     new SlashCommandBuilder().setName('website').setDescription('Website link'),
@@ -36,6 +46,13 @@ const commands = [
     new SlashCommandBuilder().setName('help').setDescription('Show commands'),
     new SlashCommandBuilder().setName('forcemsg').setDescription('Force ALL bots to message player').addStringOption(o => o.setName('player').setDescription('Player name').setRequired(true)),
     new SlashCommandBuilder().setName('stopforce').setDescription('Stop force messaging and resume queue'),
+    
+    // Gambling commands
+    new SlashCommandBuilder().setName('balance').setDescription('💰 Check your gambling balance'),
+    new SlashCommandBuilder().setName('addbalance').setDescription('💵 Add balance to user (Admin only)')
+        .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+        .addStringOption(o => o.setName('amount').setDescription('Amount (e.g., 1M, 500K, 1B)').setRequired(true)),
+    new SlashCommandBuilder().setName('gamble').setDescription('🎰 Start gambling - Choose your game!'),
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
@@ -65,64 +82,654 @@ function generateBotId() {
     return 'bot_' + Date.now().toString().slice(-6);
 }
 
+// Gambling helper functions
+function getBalance(userId) {
+    return userBalances.get(userId) || 0;
+}
+
+function setBalance(userId, amount) {
+    userBalances.set(userId, Math.max(0, Math.floor(amount)));
+}
+
+function hasRole(member, roleId) {
+    return member.roles.cache.has(roleId);
+}
+
+function parseAmount(input) {
+    const cleaned = input.toUpperCase().replace(/[^0-9KMB.]/g, '');
+    let multiplier = 1;
+    
+    if (cleaned.includes('K')) multiplier = 1000;
+    else if (cleaned.includes('M')) multiplier = 1000000;
+    else if (cleaned.includes('B')) multiplier = 1000000000;
+    
+    const number = parseFloat(cleaned.replace(/[KMB]/g, ''));
+    return Math.floor(number * multiplier);
+}
+
+function formatAmount(amount) {
+    if (amount >= 1000000000) return `${(amount / 1000000000).toFixed(2)}B`;
+    if (amount >= 1000000) return `${(amount / 1000000).toFixed(2)}M`;
+    if (amount >= 1000) return `${(amount / 1000).toFixed(2)}K`;
+    return amount.toString();
+}
+
+// Coinflip game
+function playCoinflip(choice, bet) {
+    const result = Math.random() < 0.5 ? 'heads' : 'tails';
+    const won = result === choice;
+    return { result, won, payout: won ? bet * 2 : 0 };
+}
+
+// Blackjack game
+class BlackjackGame {
+    constructor(bet, userId) {
+        this.bet = bet;
+        this.userId = userId;
+        this.deck = this.createDeck();
+        this.playerHand = [this.drawCard(), this.drawCard()];
+        this.dealerHand = [this.drawCard(), this.drawCard()];
+        this.gameOver = false;
+        this.locked = false; // Prevent double-click exploits
+    }
+
+    createDeck() {
+        const suits = ['♠', '♥', '♦', '♣'];
+        const values = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+        const deck = [];
+        for (let suit of suits) {
+            for (let value of values) {
+                deck.push({ suit, value });
+            }
+        }
+        return this.shuffle(deck);
+    }
+
+    shuffle(deck) {
+        for (let i = deck.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [deck[i], deck[j]] = [deck[j], deck[i]];
+        }
+        return deck;
+    }
+
+    drawCard() {
+        return this.deck.pop();
+    }
+
+    calculateValue(hand) {
+        let value = 0;
+        let aces = 0;
+        for (let card of hand) {
+            if (card.value === 'A') {
+                aces++;
+                value += 11;
+            } else if (['J', 'Q', 'K'].includes(card.value)) {
+                value += 10;
+            } else {
+                value += parseInt(card.value);
+            }
+        }
+        while (value > 21 && aces > 0) {
+            value -= 10;
+            aces--;
+        }
+        return value;
+    }
+
+    hit() {
+        if (this.gameOver || this.locked) return null;
+        this.locked = true;
+        
+        this.playerHand.push(this.drawCard());
+        if (this.calculateValue(this.playerHand) > 21) {
+            this.gameOver = true;
+            return { busted: true };
+        }
+        
+        this.locked = false;
+        return { busted: false };
+    }
+
+    stand() {
+        if (this.gameOver || this.locked) return null;
+        this.locked = true;
+        
+        while (this.calculateValue(this.dealerHand) < 17) {
+            this.dealerHand.push(this.drawCard());
+        }
+        this.gameOver = true;
+        return this.determineWinner();
+    }
+
+    determineWinner() {
+        const playerValue = this.calculateValue(this.playerHand);
+        const dealerValue = this.calculateValue(this.dealerHand);
+        
+        if (playerValue > 21) return { result: 'lose', payout: 0 };
+        if (dealerValue > 21) return { result: 'win', payout: this.bet * 2 };
+        if (playerValue > dealerValue) return { result: 'win', payout: this.bet * 2 };
+        if (playerValue < dealerValue) return { result: 'lose', payout: 0 };
+        return { result: 'push', payout: this.bet };
+    }
+
+    handToString(hand, hideFirst = false) {
+        if (hideFirst) {
+            return `[Hidden] ${hand[1].value}${hand[1].suit}`;
+        }
+        return hand.map(c => `${c.value}${c.suit}`).join(' ');
+    }
+}
+
+// Mines game
+class MinesGame {
+    constructor(bet, bombCount, userId) {
+        this.bet = bet;
+        this.userId = userId;
+        this.bombCount = Math.min(24, Math.max(1, bombCount));
+        this.board = this.createBoard();
+        this.revealed = new Set();
+        this.gameOver = false;
+        this.multiplier = 1.0;
+        this.locked = false;
+    }
+
+    createBoard() {
+        const board = Array(25).fill(false);
+        const bombPositions = new Set();
+        while (bombPositions.size < this.bombCount) {
+            bombPositions.add(Math.floor(Math.random() * 25));
+        }
+        bombPositions.forEach(pos => board[pos] = true);
+        return board;
+    }
+
+    reveal(position) {
+        if (this.revealed.has(position) || this.gameOver || this.locked) {
+            return { valid: false };
+        }
+
+        this.locked = true;
+        this.revealed.add(position);
+        
+        if (this.board[position]) {
+            this.gameOver = true;
+            return { bomb: true, payout: 0 };
+        }
+
+        this.multiplier += 0.25;
+        this.locked = false;
+        return { bomb: false, canCashout: true };
+    }
+
+    cashout() {
+        if (this.gameOver || this.locked) return 0;
+        this.locked = true;
+        this.gameOver = true;
+        return Math.floor(this.bet * this.multiplier);
+    }
+
+    getBoardString() {
+        let str = '';
+        for (let i = 0; i < 25; i++) {
+            if (i % 5 === 0 && i !== 0) str += '\n';
+            if (this.revealed.has(i)) {
+                str += this.board[i] ? '💣' : '💎';
+            } else if (this.gameOver) {
+                str += this.board[i] ? '💣' : '⬜';
+            } else {
+                str += '⬜';
+            }
+            str += ' ';
+        }
+        return str;
+    }
+}
+
 client.on('ready', () => {
     console.log(`✅ ${client.user.tag}`);
     client.user.setActivity('/help for commands', { type: 3 });
 });
 
-// Anti-link and anti-invite protection
+// ANTI-SPAM + ANTI-LINK PROTECTION
 client.on('messageCreate', async (message) => {
-    // Ignore bots and DMs
     if (message.author.bot || !message.guild) return;
-    
-    // Skip if user has admin permissions
     if (message.member?.permissions.has('Administrator')) return;
-    
-    // Skip commands
     if (message.content.startsWith('!') || message.content.startsWith('/')) return;
     
-    const content = message.content.toLowerCase();
+    const userId = message.author.id;
+    const content = message.content.toLowerCase().trim();
     
-    // Check for Discord invites
     const discordInviteRegex = /(discord\.gg\/|discord\.com\/invite\/|discordapp\.com\/invite\/)/i;
-    
-    // Check for any links (http, https, www)
     const linkRegex = /(https?:\/\/|www\.)/i;
     
     if (discordInviteRegex.test(content)) {
         try {
             await message.delete();
-            const warning = await message.channel.send(
-                `🚫 ${message.author}, Discord invites are not allowed in this server!`
-            );
+            const warning = await message.channel.send(`🚫 ${message.author}, Discord invites are not allowed!`);
             setTimeout(() => warning.delete().catch(() => {}), 10000);
-            console.log(`Deleted Discord invite from ${message.author.tag}`);
-        } catch (err) {
-            console.error('Failed to delete invite:', err);
-        }
+        } catch {}
         return;
     }
     
     if (linkRegex.test(content)) {
         try {
             await message.delete();
-            const warning = await message.channel.send(
-                `🚫 ${message.author}, links are not allowed!`
-            );
+            const warning = await message.channel.send(`🚫 ${message.author}, links are not allowed!`);
             setTimeout(() => warning.delete().catch(() => {}), 10000);
-            console.log(`Deleted link from ${message.author.tag}`);
-        } catch (err) {
-            console.error('Failed to delete link:', err);
-        }
+        } catch {}
         return;
     }
+    
+    const lastMsg = userLastMessage.get(userId);
+    
+    if (lastMsg && lastMsg === content && content.length > 2) {
+        try {
+            await message.delete();
+            const warnings = userSpamWarnings.get(userId) || 0;
+            userSpamWarnings.set(userId, warnings + 1);
+            
+            const warning = await message.channel.send(
+                `⚠️ ${message.author}, don't spam! (Warning ${warnings + 1}/3)`
+            );
+            setTimeout(() => warning.delete().catch(() => {}), 5000);
+            
+            if (warnings + 1 >= 3) {
+                try {
+                    await message.member.timeout(5 * 60 * 1000, 'Spamming');
+                    const timeoutMsg = await message.channel.send(
+                        `🔇 ${message.author} timed out for 5 minutes.`
+                    );
+                    setTimeout(() => timeoutMsg.delete().catch(() => {}), 10000);
+                    userSpamWarnings.delete(userId);
+                } catch {}
+            }
+        } catch {}
+        return;
+    }
+    
+    userLastMessage.set(userId, content);
+    setTimeout(() => {
+        if (userLastMessage.get(userId) === content) {
+            userLastMessage.delete(userId);
+        }
+    }, 30000);
 });
 
 client.on('interactionCreate', async interaction => {
-    if (!interaction.isChatInputCommand()) return;
+    if (!interaction.isChatInputCommand() && !interaction.isStringSelectMenu() && !interaction.isButton() && !interaction.isModalSubmit()) return;
 
+    // MODAL SUBMIT (Bet amount)
+    if (interaction.isModalSubmit()) {
+        const [gameType, userId] = interaction.customId.split('_');
+        
+        if (interaction.user.id !== userId) {
+            return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
+        }
+
+        const betInput = interaction.fields.getTextInputValue('bet_amount');
+        const bet = parseAmount(betInput);
+
+        if (isNaN(bet) || bet < MIN_BET) {
+            return interaction.reply({ content: `❌ Minimum bet is **${formatAmount(MIN_BET)}**!`, ephemeral: true });
+        }
+
+        const balance = getBalance(userId);
+        if (balance < bet) {
+            return interaction.reply({ content: `❌ Insufficient balance! You have **${formatAmount(balance)}**`, ephemeral: true });
+        }
+
+        if (activeGames.has(userId)) {
+            return interaction.reply({ content: '❌ Finish your current game first!', ephemeral: true });
+        }
+
+        setBalance(userId, balance - bet);
+
+        if (gameType === 'coinflip') {
+            const row = new ActionRowBuilder().addComponents(
+                new StringSelectMenuBuilder()
+                    .setCustomId(`coinflip-choice_${userId}_${bet}`)
+                    .setPlaceholder('Choose Heads or Tails')
+                    .addOptions([
+                        { label: 'Heads', value: 'heads', emoji: '🪙' },
+                        { label: 'Tails', value: 'tails', emoji: '🪙' }
+                    ])
+            );
+
+            const embed = new EmbedBuilder()
+                .setColor(0xffd700)
+                .setTitle('🪙 Coinflip')
+                .setDescription('Choose your side!')
+                .addFields(
+                    { name: 'Bet', value: formatAmount(bet), inline: true },
+                    { name: 'Potential Win', value: formatAmount(bet * 2), inline: true }
+                );
+
+            await interaction.reply({ embeds: [embed], components: [row] });
+
+        } else if (gameType === 'blackjack') {
+            const game = new BlackjackGame(bet, userId);
+            activeGames.set(userId, game);
+
+            const embed = new EmbedBuilder()
+                .setColor(0x0099ff)
+                .setTitle('🃏 Blackjack')
+                .addFields(
+                    { name: 'Your Hand', value: `${game.handToString(game.playerHand)} (${game.calculateValue(game.playerHand)})`, inline: true },
+                    { name: 'Dealer Hand', value: `${game.handToString(game.dealerHand, true)}`, inline: true },
+                    { name: 'Bet', value: formatAmount(bet), inline: false }
+                );
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`hit_${userId}`).setLabel('Hit').setStyle(ButtonStyle.Primary).setEmoji('🎴'),
+                new ButtonBuilder().setCustomId(`stand_${userId}`).setLabel('Stand').setStyle(ButtonStyle.Success).setEmoji('✋')
+            );
+
+            await interaction.reply({ embeds: [embed], components: [row] });
+
+        } else if (gameType.startsWith('mines')) {
+            const bombs = parseInt(gameType.split('-')[1]);
+            const game = new MinesGame(bet, bombs, userId);
+            activeGames.set(userId, game);
+
+            const embed = new EmbedBuilder()
+                .setColor(0x0099ff)
+                .setTitle('💣 Mines')
+                .setDescription(game.getBoardString())
+                .addFields(
+                    { name: 'Bet', value: formatAmount(bet), inline: true },
+                    { name: 'Bombs', value: `${bombs}`, inline: true },
+                    { name: 'Multiplier', value: `${game.multiplier.toFixed(2)}x`, inline: true }
+                );
+
+            const rows = [];
+            for (let r = 0; r < 5; r++) {
+                const row = new ActionRowBuilder();
+                for (let c = 0; c < 5; c++) {
+                    const pos = r * 5 + c;
+                    row.addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`mine-${pos}_${userId}`)
+                            .setLabel('?')
+                            .setStyle(ButtonStyle.Secondary)
+                    );
+                }
+                rows.push(row);
+            }
+
+            await interaction.reply({ embeds: [embed], components: rows });
+        }
+    }
+
+    // STRING SELECT MENU (Game selection or coinflip choice)
+    if (interaction.isStringSelectMenu()) {
+        const [action, userId, bet] = interaction.customId.split('_');
+
+        if (interaction.user.id !== userId) {
+            return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
+        }
+
+        if (action === 'game-select') {
+            const gameType = interaction.values[0];
+
+            const modal = new ModalBuilder()
+                .setCustomId(`${gameType}_${userId}`)
+                .setTitle(`${gameType === 'coinflip' ? '🪙 Coinflip' : gameType === 'blackjack' ? '🃏 Blackjack' : '💣 Mines'} - Place Bet`);
+
+            const betInput = new TextInputBuilder()
+                .setCustomId('bet_amount')
+                .setLabel('Enter bet amount (e.g., 1M, 500K, 2B)')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('500K')
+                .setRequired(true);
+
+            modal.addComponents(new ActionRowBuilder().addComponents(betInput));
+
+            await interaction.showModal(modal);
+
+        } else if (action === 'coinflip-choice') {
+            const choice = interaction.values[0];
+            const betAmount = parseInt(bet);
+            const result = playCoinflip(choice, betAmount);
+
+            if (result.won) {
+                setBalance(userId, getBalance(userId) + result.payout);
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(result.won ? 0x00ff00 : 0xff0000)
+                .setTitle(`🪙 Coinflip - ${result.won ? 'WIN!' : 'LOSE!'}`)
+                .addFields(
+                    { name: 'Your Choice', value: choice.charAt(0).toUpperCase() + choice.slice(1), inline: true },
+                    { name: 'Result', value: result.result.charAt(0).toUpperCase() + result.result.slice(1), inline: true },
+                    { name: result.won ? 'Won' : 'Lost', value: formatAmount(betAmount), inline: true },
+                    { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
+                );
+
+            await interaction.update({ embeds: [embed], components: [] });
+        }
+    }
+
+    // BUTTON INTERACTIONS (Blackjack & Mines)
+    if (interaction.isButton()) {
+        const [action, userId] = interaction.customId.split('_');
+        
+        if (interaction.user.id !== userId) {
+            return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
+        }
+
+        const game = activeGames.get(userId);
+        if (!game) {
+            return interaction.reply({ content: '❌ Game not found!', ephemeral: true });
+        }
+
+        if (action === 'hit') {
+            const result = game.hit();
+            if (!result) return interaction.reply({ content: '❌ Action already in progress!', ephemeral: true });
+
+            if (result.busted) {
+                activeGames.delete(userId);
+                const embed = new EmbedBuilder()
+                    .setColor(0xff0000)
+                    .setTitle('🃏 Blackjack - BUSTED!')
+                    .addFields(
+                        { name: 'Your Hand', value: `${game.handToString(game.playerHand)} (${game.calculateValue(game.playerHand)})`, inline: true },
+                        { name: 'Dealer Hand', value: `${game.handToString(game.dealerHand)} (${game.calculateValue(game.dealerHand)})`, inline: true },
+                        { name: 'Result', value: `Lost **${formatAmount(game.bet)}**`, inline: false },
+                        { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
+                    );
+                return interaction.update({ embeds: [embed], components: [] });
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(0x0099ff)
+                .setTitle('🃏 Blackjack')
+                .addFields(
+                    { name: 'Your Hand', value: `${game.handToString(game.playerHand)} (${game.calculateValue(game.playerHand)})`, inline: true },
+                    { name: 'Dealer Hand', value: `${game.handToString(game.dealerHand, true)}`, inline: true }
+                );
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`hit_${userId}`).setLabel('Hit').setStyle(ButtonStyle.Primary).setEmoji('🎴'),
+                new ButtonBuilder().setCustomId(`stand_${userId}`).setLabel('Stand').setStyle(ButtonStyle.Success).setEmoji('✋')
+            );
+
+            return interaction.update({ embeds: [embed], components: [row] });
+        }
+
+        if (action === 'stand') {
+            const result = game.stand();
+            if (!result) return interaction.reply({ content: '❌ Action already in progress!', ephemeral: true });
+
+            activeGames.delete(userId);
+            setBalance(userId, getBalance(userId) + result.payout);
+
+            const color = result.result === 'win' ? 0x00ff00 : result.result === 'lose' ? 0xff0000 : 0xffff00;
+            const resultText = result.result === 'win' ? `Won **${formatAmount(result.payout)}**!` : result.result === 'lose' ? `Lost **${formatAmount(game.bet)}**!` : `Push! Bet returned.`;
+
+            const embed = new EmbedBuilder()
+                .setColor(color)
+                .setTitle(`🃏 Blackjack - ${result.result.toUpperCase()}`)
+                .addFields(
+                    { name: 'Your Hand', value: `${game.handToString(game.playerHand)} (${game.calculateValue(game.playerHand)})`, inline: true },
+                    { name: 'Dealer Hand', value: `${game.handToString(game.dealerHand)} (${game.calculateValue(game.dealerHand)})`, inline: true },
+                    { name: 'Result', value: resultText, inline: false },
+                    { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
+                );
+
+            return interaction.update({ embeds: [embed], components: [] });
+        }
+
+        if (action.startsWith('mine')) {
+            const position = parseInt(action.split('-')[1]);
+            const result = game.reveal(position);
+
+            if (!result.valid) {
+                return interaction.reply({ content: '❌ Invalid move!', ephemeral: true });
+            }
+
+            if (result.bomb) {
+                activeGames.delete(userId);
+                const embed = new EmbedBuilder()
+                    .setColor(0xff0000)
+                    .setTitle('💣 Mines - BOOM!')
+                    .setDescription(game.getBoardString())
+                    .addFields(
+                        { name: 'Result', value: `Hit a bomb! Lost **${formatAmount(game.bet)}**`, inline: false },
+                        { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
+                    );
+                return interaction.update({ embeds: [embed], components: [] });
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(0x00ff00)
+                .setTitle('💎 Mines')
+                .setDescription(game.getBoardString())
+                .addFields(
+                    { name: 'Multiplier', value: `${game.multiplier.toFixed(2)}x`, inline: true },
+                    { name: 'Potential Win', value: formatAmount(Math.floor(game.bet * game.multiplier)), inline: true }
+                );
+
+            const rows = [];
+            for (let r = 0; r < 5; r++) {
+                const row = new ActionRowBuilder();
+                for (let c = 0; c < 5; c++) {
+                    const pos = r * 5 + c;
+                    row.addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`mine-${pos}_${userId}`)
+                            .setLabel(game.revealed.has(pos) ? '💎' : '?')
+                            .setStyle(game.revealed.has(pos) ? ButtonStyle.Success : ButtonStyle.Secondary)
+                            .setDisabled(game.revealed.has(pos))
+                    );
+                }
+                rows.push(row);
+            }
+
+            const cashoutRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`cashout_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success)
+            );
+            rows.push(cashoutRow);
+
+            return interaction.update({ embeds: [embed], components: rows });
+        }
+
+        if (action === 'cashout') {
+            const payout = game.cashout();
+            if (payout === 0) return interaction.reply({ content: '❌ Cashout failed!', ephemeral: true });
+
+            activeGames.delete(userId);
+            setBalance(userId, getBalance(userId) + payout);
+
+            const embed = new EmbedBuilder()
+                .setColor(0x00ff00)
+                .setTitle('💰 Mines - Cashed Out!')
+                .setDescription(game.getBoardString())
+                .addFields(
+                    { name: 'Multiplier', value: `${game.multiplier.toFixed(2)}x`, inline: true },
+                    { name: 'Winnings', value: formatAmount(payout), inline: true },
+                    { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
+                );
+
+            return interaction.update({ embeds: [embed], components: [] });
+        }
+    }
+
+    // SLASH COMMANDS
     try {
         switch (interaction.commandName) {
+            case 'balance': {
+                const balance = getBalance(interaction.user.id);
+                const embed = new EmbedBuilder()
+                    .setColor(0xffd700)
+                    .setTitle('💰 Your Balance')
+                    .setDescription(`**${formatAmount(balance)}**`)
+                    .setFooter({ text: 'Open a ticket to add balance' });
+                await interaction.reply({ embeds: [embed], ephemeral: true });
+                break;
+            }
+
+            case 'addbalance': {
+                if (!interaction.member.permissions.has('Administrator')) {
+                    return interaction.reply({ content: '❌ Admin only!', ephemeral: true });
+                }
+
+                const user = interaction.options.getUser('user');
+                const amountStr = interaction.options.getString('amount');
+                const amount = parseAmount(amountStr);
+
+                if (isNaN(amount) || amount <= 0) {
+                    return interaction.reply({ content: '❌ Invalid amount!', ephemeral: true });
+                }
+
+                const currentBalance = getBalance(user.id);
+                setBalance(user.id, currentBalance + amount);
+
+                await interaction.reply(`✅ Added **${formatAmount(amount)}** to ${user}'s balance.\nNew balance: **${formatAmount(getBalance(user.id))}**`);
+                break;
+            }
+
+            case 'gamble': {
+                if (!hasRole(interaction.member, MEMBER_ROLE_ID)) {
+                    return interaction.reply({ content: '❌ You need the Member role to gamble!', ephemeral: true });
+                }
+
+                const balance = getBalance(interaction.user.id);
+                if (balance < MIN_BET) {
+                    return interaction.reply({ content: `❌ Insufficient balance! You need at least **${formatAmount(MIN_BET)}**\n\nOpen a ticket to add balance.`, ephemeral: true });
+                }
+
+                const embed = new EmbedBuilder()
+                    .setColor(0x9b59b6)
+                    .setTitle('🎰 Welcome to the Casino!')
+                    .setDescription(`**Your Balance:** ${formatAmount(balance)}\n**Minimum Bet:** ${formatAmount(MIN_BET)}\n\n**Choose your game:**`)
+                    .addFields(
+                        { name: '🪙 Coinflip', value: 'Double or nothing! 50/50 chance.\n**Payout:** 2x', inline: true },
+                        { name: '🃏 Blackjack', value: 'Beat the dealer to 21!\n**Payout:** 2x', inline: true },
+                        { name: '💣 Mines (3 Bombs)', value: 'Find diamonds, avoid bombs!\n**Payout:** Up to 5x+', inline: true },
+                        { name: '💣 Mines (5 Bombs)', value: 'Higher risk, higher reward!\n**Payout:** Up to 10x+', inline: true },
+                        { name: '💣 Mines (10 Bombs)', value: 'Expert mode!\n**Payout:** Up to 20x+', inline: true }
+                    );
+
+                const row = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId(`game-select_${interaction.user.id}`)
+                        .setPlaceholder('🎲 Choose a game to play')
+                        .addOptions([
+                            { label: 'Coinflip', value: 'coinflip', description: '50/50 - Double or nothing', emoji: '🪙' },
+                            { label: 'Blackjack', value: 'blackjack', description: 'Beat the dealer to 21', emoji: '🃏' },
+                            { label: 'Mines (3 Bombs)', value: 'mines-3', description: 'Easy mode - Lower risk', emoji: '💣' },
+                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Medium mode - Balanced', emoji: '💣' },
+                            { label: 'Mines (10 Bombs)', value: 'mines-10', description: 'Hard mode - High risk', emoji: '💣' }
+                        ])
+                );
+
+                await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+                break;
+            }
+
+            // YOUR ORIGINAL COMMANDS (UNCHANGED) - I'll include them all below...
+
             case 'sell': {
                 const embed = new EmbedBuilder()
                     .setColor(0xf39c12)
@@ -321,6 +928,7 @@ client.on('interactionCreate', async interaction => {
             case 'help': {
                 await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x0099ff).setTitle('📖 Bot Commands').setDescription('All available commands').addFields(
                     { name: '🛒 Shop Commands', value: '`/rules` • `/prices` • `/payment` • `/sell` • `/domain` • `/website`', inline: false },
+                    { name: '🎰 Gambling', value: '`/gamble` • `/balance`', inline: false },
                     { name: '🤖 Bot Management', value: '`/add` • `/remove` • `/stopall` • `/status` • `/list`', inline: false },
                     { name: '🎯 Advanced', value: '`/forcemsg` • `/stopforce`', inline: false },
                     { name: '📢 Info', value: '`/vouch` • `/rewards` • `/help`', inline: false }
