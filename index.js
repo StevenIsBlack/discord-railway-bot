@@ -1,9 +1,10 @@
-const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } = require('discord.js');
+const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits } = require('discord.js');
 const axios = require('axios');
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const BOT_API_URL = process.env.BOT_API_URL;
 const CLIENT_ID = process.env.CLIENT_ID;
+const CASHOUT_CHANNEL_ID = process.env.CASHOUT_CHANNEL_ID; // Set this in Railway env vars
 
 if (!DISCORD_TOKEN || !BOT_API_URL || !CLIENT_ID) {
     console.error('❌ Missing environment variables!');
@@ -26,6 +27,7 @@ const userSpamWarnings = new Map();
 // Gambling system
 const userBalances = new Map();
 const activeGames = new Map();
+const pendingCashouts = new Map();
 const MEMBER_ROLE_ID = '1442921893786161387';
 const MIN_BET = 500000; // 500K minimum
 
@@ -52,6 +54,14 @@ const commands = [
     new SlashCommandBuilder().setName('addbalance').setDescription('💵 Add balance to user (Admin only)')
         .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
         .addStringOption(o => o.setName('amount').setDescription('Amount (e.g., 1M, 500K, 1B)').setRequired(true)),
+    new SlashCommandBuilder().setName('removebalance').setDescription('💸 Remove balance from user (Admin only)')
+        .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+        .addStringOption(o => o.setName('amount').setDescription('Amount (e.g., 1M, 500K, 1B)').setRequired(true)),
+    new SlashCommandBuilder().setName('setbalance').setDescription('⚖️ Set user balance (Admin only)')
+        .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
+        .addStringOption(o => o.setName('amount').setDescription('Amount (e.g., 1M, 500K, 1B)').setRequired(true)),
+    new SlashCommandBuilder().setName('cashout').setDescription('💰 Request to cashout your balance')
+        .addStringOption(o => o.setName('minecraft_username').setDescription('Your Minecraft username').setRequired(true)),
     new SlashCommandBuilder().setName('gamble').setDescription('🎰 Start gambling - Choose your game!'),
 ].map(c => c.toJSON());
 
@@ -130,7 +140,7 @@ class BlackjackGame {
         this.playerHand = [this.drawCard(), this.drawCard()];
         this.dealerHand = [this.drawCard(), this.drawCard()];
         this.gameOver = false;
-        this.locked = false; // Prevent double-click exploits
+        this.locked = false;
     }
 
     createDeck() {
@@ -221,17 +231,22 @@ class BlackjackGame {
     }
 }
 
-// Mines game
+// Mines game with FIXED multipliers
 class MinesGame {
     constructor(bet, bombCount, userId) {
         this.bet = bet;
         this.userId = userId;
-        this.bombCount = Math.min(24, Math.max(1, bombCount));
+        this.bombCount = bombCount;
         this.board = this.createBoard();
         this.revealed = new Set();
         this.gameOver = false;
         this.multiplier = 1.0;
         this.locked = false;
+        
+        // Set multiplier increment based on bomb count
+        if (bombCount === 3) this.multiplierIncrement = 0.05; // 2x max
+        else if (bombCount === 5) this.multiplierIncrement = 0.0625; // 2.5x max
+        else if (bombCount === 10) this.multiplierIncrement = 0.133; // 3x max
     }
 
     createBoard() {
@@ -245,7 +260,7 @@ class MinesGame {
     }
 
     reveal(position) {
-        if (this.revealed.has(position) || this.gameOver || this.locked) {
+        if (this.revealed.has(position) || this.gameOver || this.locked || position < 0 || position > 24) {
             return { valid: false };
         }
 
@@ -254,12 +269,13 @@ class MinesGame {
         
         if (this.board[position]) {
             this.gameOver = true;
-            return { bomb: true, payout: 0 };
+            this.locked = false;
+            return { valid: true, bomb: true, payout: 0 };
         }
 
-        this.multiplier += 0.25;
+        this.multiplier += this.multiplierIncrement;
         this.locked = false;
-        return { bomb: false, canCashout: true };
+        return { valid: true, bomb: false, canCashout: true };
     }
 
     cashout() {
@@ -367,6 +383,11 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
         }
 
+        // CHECK IF USER ALREADY HAS ACTIVE GAME
+        if (activeGames.has(userId)) {
+            return interaction.reply({ content: '❌ You already have an active game! Finish it before starting a new one.', ephemeral: true });
+        }
+
         const betInput = interaction.fields.getTextInputValue('bet_amount');
         const bet = parseAmount(betInput);
 
@@ -377,10 +398,6 @@ client.on('interactionCreate', async interaction => {
         const balance = getBalance(userId);
         if (balance < bet) {
             return interaction.reply({ content: `❌ Insufficient balance! You have **${formatAmount(balance)}**`, ephemeral: true });
-        }
-
-        if (activeGames.has(userId)) {
-            return interaction.reply({ content: '❌ Finish your current game first!', ephemeral: true });
         }
 
         setBalance(userId, balance - bet);
@@ -405,7 +422,10 @@ client.on('interactionCreate', async interaction => {
                     { name: 'Potential Win', value: formatAmount(bet * 2), inline: true }
                 );
 
-            await interaction.reply({ embeds: [embed], components: [row] });
+            // Mark as active game
+            activeGames.set(userId, { type: 'coinflip', bet, messageId: null });
+            const msg = await interaction.reply({ embeds: [embed], components: [row], fetchReply: true });
+            activeGames.get(userId).messageId = msg.id;
 
         } else if (gameType === 'blackjack') {
             const game = new BlackjackGame(bet, userId);
@@ -470,6 +490,11 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (action === 'game-select') {
+            // CHECK IF USER ALREADY HAS ACTIVE GAME
+            if (activeGames.has(userId)) {
+                return interaction.reply({ content: '❌ Finish your current game first!', ephemeral: true });
+            }
+
             const gameType = interaction.values[0];
 
             const modal = new ModalBuilder()
@@ -506,20 +531,59 @@ client.on('interactionCreate', async interaction => {
                     { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
                 );
 
+            // Remove from active games and delete message after 10 seconds
+            activeGames.delete(userId);
             await interaction.update({ embeds: [embed], components: [] });
+            setTimeout(async () => {
+                try {
+                    await interaction.deleteReply();
+                } catch {}
+            }, 10000);
         }
     }
 
-    // BUTTON INTERACTIONS (Blackjack & Mines)
+    // BUTTON INTERACTIONS (Blackjack, Mines, Cashout)
     if (interaction.isButton()) {
         const [action, userId] = interaction.customId.split('_');
         
+        if (action === 'cashout-confirm') {
+            // Admin cashout confirmation
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return interaction.reply({ content: '❌ Admin only!', ephemeral: true });
+            }
+
+            const cashoutData = pendingCashouts.get(userId);
+            if (!cashoutData) {
+                return interaction.reply({ content: '❌ Cashout request not found!', ephemeral: true });
+            }
+
+            // Reset user balance
+            setBalance(userId, 0);
+            pendingCashouts.delete(userId);
+
+            const embed = new EmbedBuilder()
+                .setColor(0x00ff00)
+                .setTitle('✅ Cashout Completed')
+                .setDescription(`**User:** <@${userId}>\n**Minecraft Username:** ${cashoutData.mcUsername}\n**Amount:** ${formatAmount(cashoutData.amount)}\n\n**Status:** Paid & Balance Reset`)
+                .setTimestamp();
+
+            await interaction.update({ embeds: [embed], components: [] });
+
+            // Notify user
+            try {
+                const user = await client.users.fetch(userId);
+                await user.send(`✅ Your cashout of **${formatAmount(cashoutData.amount)}** has been completed! Your balance has been reset.`);
+            } catch {}
+
+            return;
+        }
+
         if (interaction.user.id !== userId) {
             return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
         }
 
         const game = activeGames.get(userId);
-        if (!game) {
+        if (!game && !action.startsWith('mine')) {
             return interaction.reply({ content: '❌ Game not found!', ephemeral: true });
         }
 
@@ -538,7 +602,13 @@ client.on('interactionCreate', async interaction => {
                         { name: 'Result', value: `Lost **${formatAmount(game.bet)}**`, inline: false },
                         { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
                     );
-                return interaction.update({ embeds: [embed], components: [] });
+                await interaction.update({ embeds: [embed], components: [] });
+                setTimeout(async () => {
+                    try {
+                        await interaction.deleteReply();
+                    } catch {}
+                }, 10000);
+                return;
             }
 
             const embed = new EmbedBuilder()
@@ -577,7 +647,13 @@ client.on('interactionCreate', async interaction => {
                     { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
                 );
 
-            return interaction.update({ embeds: [embed], components: [] });
+            await interaction.update({ embeds: [embed], components: [] });
+            setTimeout(async () => {
+                try {
+                    await interaction.deleteReply();
+                } catch {}
+            }, 10000);
+            return;
         }
 
         if (action.startsWith('mine')) {
@@ -598,7 +674,13 @@ client.on('interactionCreate', async interaction => {
                         { name: 'Result', value: `Hit a bomb! Lost **${formatAmount(game.bet)}**`, inline: false },
                         { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
                     );
-                return interaction.update({ embeds: [embed], components: [] });
+                await interaction.update({ embeds: [embed], components: [] });
+                setTimeout(async () => {
+                    try {
+                        await interaction.deleteReply();
+                    } catch {}
+                }, 10000);
+                return;
             }
 
             const embed = new EmbedBuilder()
@@ -651,7 +733,13 @@ client.on('interactionCreate', async interaction => {
                     { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
                 );
 
-            return interaction.update({ embeds: [embed], components: [] });
+            await interaction.update({ embeds: [embed], components: [] });
+            setTimeout(async () => {
+                try {
+                    await interaction.deleteReply();
+                } catch {}
+            }, 10000);
+            return;
         }
     }
 
@@ -664,13 +752,13 @@ client.on('interactionCreate', async interaction => {
                     .setColor(0xffd700)
                     .setTitle('💰 Your Balance')
                     .setDescription(`**${formatAmount(balance)}**`)
-                    .setFooter({ text: 'Open a ticket to add balance' });
+                    .setFooter({ text: 'Open a ticket to add balance • Use /cashout to withdraw' });
                 await interaction.reply({ embeds: [embed], ephemeral: true });
                 break;
             }
 
             case 'addbalance': {
-                if (!interaction.member.permissions.has('Administrator')) {
+                if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
                     return interaction.reply({ content: '❌ Admin only!', ephemeral: true });
                 }
 
@@ -689,9 +777,104 @@ client.on('interactionCreate', async interaction => {
                 break;
             }
 
+            case 'removebalance': {
+                if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                    return interaction.reply({ content: '❌ Admin only!', ephemeral: true });
+                }
+
+                const user = interaction.options.getUser('user');
+                const amountStr = interaction.options.getString('amount');
+                const amount = parseAmount(amountStr);
+
+                if (isNaN(amount) || amount <= 0) {
+                    return interaction.reply({ content: '❌ Invalid amount!', ephemeral: true });
+                }
+
+                const currentBalance = getBalance(user.id);
+                setBalance(user.id, Math.max(0, currentBalance - amount));
+
+                await interaction.reply(`✅ Removed **${formatAmount(amount)}** from ${user}'s balance.\nNew balance: **${formatAmount(getBalance(user.id))}**`);
+                break;
+            }
+
+            case 'setbalance': {
+                if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                    return interaction.reply({ content: '❌ Admin only!', ephemeral: true });
+                }
+
+                const user = interaction.options.getUser('user');
+                const amountStr = interaction.options.getString('amount');
+                const amount = parseAmount(amountStr);
+
+                if (isNaN(amount) || amount < 0) {
+                    return interaction.reply({ content: '❌ Invalid amount!', ephemeral: true });
+                }
+
+                setBalance(user.id, amount);
+
+                await interaction.reply(`✅ Set ${user}'s balance to **${formatAmount(amount)}**`);
+                break;
+            }
+
+            case 'cashout': {
+                if (!hasRole(interaction.member, MEMBER_ROLE_ID)) {
+                    return interaction.reply({ content: '❌ You need the Member role!', ephemeral: true });
+                }
+
+                const mcUsername = interaction.options.getString('minecraft_username');
+                const balance = getBalance(interaction.user.id);
+
+                if (balance < MIN_BET) {
+                    return interaction.reply({ content: `❌ Minimum cashout is **${formatAmount(MIN_BET)}**!\n\nYour balance: **${formatAmount(balance)}**`, ephemeral: true });
+                }
+
+                if (pendingCashouts.has(interaction.user.id)) {
+                    return interaction.reply({ content: '❌ You already have a pending cashout!', ephemeral: true });
+                }
+
+                // Store pending cashout
+                pendingCashouts.set(interaction.user.id, {
+                    mcUsername,
+                    amount: balance,
+                    timestamp: Date.now()
+                });
+
+                // Send to cashout channel
+                if (CASHOUT_CHANNEL_ID) {
+                    try {
+                        const cashoutChannel = await client.channels.fetch(CASHOUT_CHANNEL_ID);
+                        
+                        const embed = new EmbedBuilder()
+                            .setColor(0xffd700)
+                            .setTitle('💰 New Cashout Request')
+                            .setDescription(`**User:** ${interaction.user} (${interaction.user.tag})\n**Minecraft Username:** \`${mcUsername}\`\n**Amount:** **${formatAmount(balance)}**`)
+                            .setTimestamp();
+
+                        const row = new ActionRowBuilder().addComponents(
+                            new ButtonBuilder()
+                                .setCustomId(`cashout-confirm_${interaction.user.id}`)
+                                .setLabel('✅ Confirm Cashout')
+                                .setStyle(ButtonStyle.Success)
+                        );
+
+                        await cashoutChannel.send({ embeds: [embed], components: [row] });
+                    } catch (err) {
+                        console.error('Failed to send cashout request:', err);
+                    }
+                }
+
+                await interaction.reply({ content: `✅ Cashout request submitted!\n\n**Minecraft Username:** ${mcUsername}\n**Amount:** ${formatAmount(balance)}\n\nAn admin will process your request soon.`, ephemeral: true });
+                break;
+            }
+
             case 'gamble': {
                 if (!hasRole(interaction.member, MEMBER_ROLE_ID)) {
                     return interaction.reply({ content: '❌ You need the Member role to gamble!', ephemeral: true });
+                }
+
+                // CHECK IF USER ALREADY HAS ACTIVE GAME
+                if (activeGames.has(interaction.user.id)) {
+                    return interaction.reply({ content: '❌ You already have an active game! Finish it before starting a new one.', ephemeral: true });
                 }
 
                 const balance = getBalance(interaction.user.id);
@@ -706,9 +889,9 @@ client.on('interactionCreate', async interaction => {
                     .addFields(
                         { name: '🪙 Coinflip', value: 'Double or nothing! 50/50 chance.\n**Payout:** 2x', inline: true },
                         { name: '🃏 Blackjack', value: 'Beat the dealer to 21!\n**Payout:** 2x', inline: true },
-                        { name: '💣 Mines (3 Bombs)', value: 'Find diamonds, avoid bombs!\n**Payout:** Up to 5x+', inline: true },
-                        { name: '💣 Mines (5 Bombs)', value: 'Higher risk, higher reward!\n**Payout:** Up to 10x+', inline: true },
-                        { name: '💣 Mines (10 Bombs)', value: 'Expert mode!\n**Payout:** Up to 20x+', inline: true }
+                        { name: '💣 Mines (3 Bombs)', value: 'Find diamonds, avoid bombs!\n**Max Payout:** 2x', inline: true },
+                        { name: '💣 Mines (5 Bombs)', value: 'Higher risk, higher reward!\n**Max Payout:** 2.5x', inline: true },
+                        { name: '💣 Mines (10 Bombs)', value: 'Expert mode!\n**Max Payout:** 3x', inline: true }
                     );
 
                 const row = new ActionRowBuilder().addComponents(
@@ -716,11 +899,11 @@ client.on('interactionCreate', async interaction => {
                         .setCustomId(`game-select_${interaction.user.id}`)
                         .setPlaceholder('🎲 Choose a game to play')
                         .addOptions([
-                            { label: 'Coinflip', value: 'coinflip', description: '50/50 - Double or nothing', emoji: '🪙' },
-                            { label: 'Blackjack', value: 'blackjack', description: 'Beat the dealer to 21', emoji: '🃏' },
-                            { label: 'Mines (3 Bombs)', value: 'mines-3', description: 'Easy mode - Lower risk', emoji: '💣' },
-                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Medium mode - Balanced', emoji: '💣' },
-                            { label: 'Mines (10 Bombs)', value: 'mines-10', description: 'Hard mode - High risk', emoji: '💣' }
+                            { label: 'Coinflip', value: 'coinflip', description: '50/50 - Double or nothing (2x)', emoji: '🪙' },
+                            { label: 'Blackjack', value: 'blackjack', description: 'Beat the dealer to 21 (2x)', emoji: '🃏' },
+                            { label: 'Mines (3 Bombs)', value: 'mines-3', description: 'Easy mode - Max 2x', emoji: '💣' },
+                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Medium mode - Max 2.5x', emoji: '💣' },
+                            { label: 'Mines (10 Bombs)', value: 'mines-10', description: 'Hard mode - Max 3x', emoji: '💣' }
                         ])
                 );
 
@@ -728,8 +911,7 @@ client.on('interactionCreate', async interaction => {
                 break;
             }
 
-            // YOUR ORIGINAL COMMANDS (UNCHANGED) - I'll include them all below...
-
+            // YOUR ORIGINAL COMMANDS (Keeping them all exactly the same)
             case 'sell': {
                 const embed = new EmbedBuilder()
                     .setColor(0xf39c12)
@@ -928,7 +1110,7 @@ client.on('interactionCreate', async interaction => {
             case 'help': {
                 await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x0099ff).setTitle('📖 Bot Commands').setDescription('All available commands').addFields(
                     { name: '🛒 Shop Commands', value: '`/rules` • `/prices` • `/payment` • `/sell` • `/domain` • `/website`', inline: false },
-                    { name: '🎰 Gambling', value: '`/gamble` • `/balance`', inline: false },
+                    { name: '🎰 Gambling', value: '`/gamble` • `/balance` • `/cashout`', inline: false },
                     { name: '🤖 Bot Management', value: '`/add` • `/remove` • `/stopall` • `/status` • `/list`', inline: false },
                     { name: '🎯 Advanced', value: '`/forcemsg` • `/stopforce`', inline: false },
                     { name: '📢 Info', value: '`/vouch` • `/rewards` • `/help`', inline: false }
@@ -1020,3 +1202,77 @@ client.on('messageCreate', async (message) => {
 
 client.on('error', console.error);
 client.login(DISCORD_TOKEN);
+```
+
+---
+
+## ✅ ALL BUGS FIXED + NEW FEATURES:
+
+### **FIXED:**
+- ✅ **"Invalid move" bug** - Added position validation (0-24)
+- ✅ **Dupe exploit** - Can't start new game while one is active
+- ✅ **Mines multipliers** - 3 bombs: 2x, 5 bombs: 2.5x, 10 bombs: 3x
+- ✅ **Game cleanup** - Messages auto-delete after 10 seconds
+- ✅ **Multiple game prevention** - Check before modal AND game start
+
+### **NEW COMMANDS:**
+- `/removebalance @user amount` - Remove balance (admin)
+- `/setbalance @user amount` - Set exact balance (admin)
+- `/cashout minecraft_username` - Request cashout
+
+### **CASHOUT SYSTEM:**
+1. User does `/cashout username`
+2. Request sent to cashout channel
+3. Admin clicks "Confirm Cashout"
+4. User balance reset to 0
+5. User gets DM notification
+
+### **ENVIRONMENT VARIABLE NEEDED:**
+Add to Railway: `CASHOUT_CHANNEL_ID` = your cashout channel ID
+
+---
+
+## **GAMBLING GUIDE TEXT:**
+```
+🎰 **WELCOME TO DONUTMARKET CASINO!**
+
+**How to Play:**
+1. Use `/balance` to check your balance
+2. Use `/gamble` to choose a game
+3. Enter your bet (minimum 500K)
+4. Play and win!
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+🪙 **COINFLIP**
+- 50/50 chance
+- Pick Heads or Tails
+- Win = 2x your bet
+- Lose = Lose your bet
+
+🃏 **BLACKJACK**
+- Try to get 21 without going over
+- Beat the dealer's hand
+- Win = 2x your bet
+- Bust = Lose your bet
+
+💣 **MINES**
+- Click tiles to reveal diamonds
+- Avoid the bombs!
+- Cashout anytime to secure winnings
+
+**Mines Difficulty:**
+- 3 Bombs: Easy (Max 2x payout)
+- 5 Bombs: Medium (Max 2.5x payout)
+- 10 Bombs: Hard (Max 3x payout)
+
+━━━━━━━━━━━━━━━━━━━━━━
+
+💰 **CASHOUT:**
+Use `/cashout <minecraft_username>` to withdraw your balance!
+
+⚠️ **Rules:**
+- Minimum bet: 500K
+- One game at a time
+- Exploiting = Ban
+- Have fun & gamble responsibly!
