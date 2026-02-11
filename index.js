@@ -4,7 +4,7 @@ const axios = require('axios');
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const BOT_API_URL = process.env.BOT_API_URL;
 const CLIENT_ID = process.env.CLIENT_ID;
-const CASHOUT_CHANNEL_ID = process.env.CASHOUT_CHANNEL_ID; // Set this in Railway env vars
+const CASHOUT_CHANNEL_ID = process.env.CASHOUT_CHANNEL_ID || '1471178234073841826';
 
 if (!DISCORD_TOKEN || !BOT_API_URL || !CLIENT_ID) {
     console.error('❌ Missing environment variables!');
@@ -20,16 +20,13 @@ const client = new Client({
     ]
 });
 
-// Anti-spam tracking
 const userLastMessage = new Map();
 const userSpamWarnings = new Map();
-
-// Gambling system
 const userBalances = new Map();
 const activeGames = new Map();
 const pendingCashouts = new Map();
 const MEMBER_ROLE_ID = '1442921893786161387';
-const MIN_BET = 500000; // 500K minimum
+const MIN_BET = 500000;
 
 const commands = [
     new SlashCommandBuilder().setName('vouch').setDescription('Vouching information'),
@@ -48,8 +45,6 @@ const commands = [
     new SlashCommandBuilder().setName('help').setDescription('Show commands'),
     new SlashCommandBuilder().setName('forcemsg').setDescription('Force ALL bots to message player').addStringOption(o => o.setName('player').setDescription('Player name').setRequired(true)),
     new SlashCommandBuilder().setName('stopforce').setDescription('Stop force messaging and resume queue'),
-    
-    // Gambling commands
     new SlashCommandBuilder().setName('balance').setDescription('💰 Check your gambling balance'),
     new SlashCommandBuilder().setName('addbalance').setDescription('💵 Add balance to user (Admin only)')
         .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
@@ -92,7 +87,6 @@ function generateBotId() {
     return 'bot_' + Date.now().toString().slice(-6);
 }
 
-// Gambling helper functions
 function getBalance(userId) {
     return userBalances.get(userId) || 0;
 }
@@ -124,14 +118,12 @@ function formatAmount(amount) {
     return amount.toString();
 }
 
-// Coinflip game
 function playCoinflip(choice, bet) {
     const result = Math.random() < 0.5 ? 'heads' : 'tails';
     const won = result === choice;
     return { result, won, payout: won ? bet * 2 : 0 };
 }
 
-// Blackjack game
 class BlackjackGame {
     constructor(bet, userId) {
         this.bet = bet;
@@ -231,7 +223,6 @@ class BlackjackGame {
     }
 }
 
-// Mines game with FIXED multipliers
 class MinesGame {
     constructor(bet, bombCount, userId) {
         this.bet = bet;
@@ -243,10 +234,9 @@ class MinesGame {
         this.multiplier = 1.0;
         this.locked = false;
         
-        // Set multiplier increment based on bomb count
-        if (bombCount === 3) this.multiplierIncrement = 0.05; // 2x max
-        else if (bombCount === 5) this.multiplierIncrement = 0.0625; // 2.5x max
-        else if (bombCount === 10) this.multiplierIncrement = 0.133; // 3x max
+        if (bombCount === 3) this.multiplierIncrement = 0.05;
+        else if (bombCount === 5) this.multiplierIncrement = 0.0625;
+        else if (bombCount === 10) this.multiplierIncrement = 0.133;
     }
 
     createBoard() {
@@ -307,7 +297,6 @@ client.on('ready', () => {
     client.user.setActivity('/help for commands', { type: 3 });
 });
 
-// ANTI-SPAM + ANTI-LINK PROTECTION
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
     if (message.member?.permissions.has('Administrator')) return;
@@ -375,7 +364,6 @@ client.on('messageCreate', async (message) => {
 client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand() && !interaction.isStringSelectMenu() && !interaction.isButton() && !interaction.isModalSubmit()) return;
 
-    // MODAL SUBMIT (Bet amount)
     if (interaction.isModalSubmit()) {
         const [gameType, userId] = interaction.customId.split('_');
         
@@ -383,7 +371,6 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
         }
 
-        // CHECK IF USER ALREADY HAS ACTIVE GAME
         if (activeGames.has(userId)) {
             return interaction.reply({ content: '❌ You already have an active game! Finish it before starting a new one.', ephemeral: true });
         }
@@ -422,7 +409,6 @@ client.on('interactionCreate', async interaction => {
                     { name: 'Potential Win', value: formatAmount(bet * 2), inline: true }
                 );
 
-            // Mark as active game
             activeGames.set(userId, { type: 'coinflip', bet, messageId: null });
             const msg = await interaction.reply({ embeds: [embed], components: [row], fetchReply: true });
             activeGames.get(userId).messageId = msg.id;
@@ -481,7 +467,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // STRING SELECT MENU (Game selection or coinflip choice)
     if (interaction.isStringSelectMenu()) {
         const [action, userId, bet] = interaction.customId.split('_');
 
@@ -490,7 +475,6 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (action === 'game-select') {
-            // CHECK IF USER ALREADY HAS ACTIVE GAME
             if (activeGames.has(userId)) {
                 return interaction.reply({ content: '❌ Finish your current game first!', ephemeral: true });
             }
@@ -531,7 +515,6 @@ client.on('interactionCreate', async interaction => {
                     { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
                 );
 
-            // Remove from active games and delete message after 10 seconds
             activeGames.delete(userId);
             await interaction.update({ embeds: [embed], components: [] });
             setTimeout(async () => {
@@ -542,12 +525,10 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // BUTTON INTERACTIONS (Blackjack, Mines, Cashout)
     if (interaction.isButton()) {
         const [action, userId] = interaction.customId.split('_');
         
         if (action === 'cashout-confirm') {
-            // Admin cashout confirmation
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
                 return interaction.reply({ content: '❌ Admin only!', ephemeral: true });
             }
@@ -557,7 +538,6 @@ client.on('interactionCreate', async interaction => {
                 return interaction.reply({ content: '❌ Cashout request not found!', ephemeral: true });
             }
 
-            // Reset user balance
             setBalance(userId, 0);
             pendingCashouts.delete(userId);
 
@@ -569,7 +549,6 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.update({ embeds: [embed], components: [] });
 
-            // Notify user
             try {
                 const user = await client.users.fetch(userId);
                 await user.send(`✅ Your cashout of **${formatAmount(cashoutData.amount)}** has been completed! Your balance has been reset.`);
@@ -743,7 +722,6 @@ client.on('interactionCreate', async interaction => {
         }
     }
 
-    // SLASH COMMANDS
     try {
         switch (interaction.commandName) {
             case 'balance': {
@@ -832,14 +810,12 @@ client.on('interactionCreate', async interaction => {
                     return interaction.reply({ content: '❌ You already have a pending cashout!', ephemeral: true });
                 }
 
-                // Store pending cashout
                 pendingCashouts.set(interaction.user.id, {
                     mcUsername,
                     amount: balance,
                     timestamp: Date.now()
                 });
 
-                // Send to cashout channel
                 if (CASHOUT_CHANNEL_ID) {
                     try {
                         const cashoutChannel = await client.channels.fetch(CASHOUT_CHANNEL_ID);
@@ -872,7 +848,6 @@ client.on('interactionCreate', async interaction => {
                     return interaction.reply({ content: '❌ You need the Member role to gamble!', ephemeral: true });
                 }
 
-                // CHECK IF USER ALREADY HAS ACTIVE GAME
                 if (activeGames.has(interaction.user.id)) {
                     return interaction.reply({ content: '❌ You already have an active game! Finish it before starting a new one.', ephemeral: true });
                 }
@@ -911,7 +886,6 @@ client.on('interactionCreate', async interaction => {
                 break;
             }
 
-            // YOUR ORIGINAL COMMANDS (Keeping them all exactly the same)
             case 'sell': {
                 const embed = new EmbedBuilder()
                     .setColor(0xf39c12)
@@ -1123,7 +1097,6 @@ client.on('interactionCreate', async interaction => {
     }
 });
 
-// ! COMMANDS
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
     if (!message.content.startsWith('!')) return;
@@ -1202,77 +1175,3 @@ client.on('messageCreate', async (message) => {
 
 client.on('error', console.error);
 client.login(DISCORD_TOKEN);
-```
-
----
-
-## ✅ ALL BUGS FIXED + NEW FEATURES:
-
-### **FIXED:**
-- ✅ **"Invalid move" bug** - Added position validation (0-24)
-- ✅ **Dupe exploit** - Can't start new game while one is active
-- ✅ **Mines multipliers** - 3 bombs: 2x, 5 bombs: 2.5x, 10 bombs: 3x
-- ✅ **Game cleanup** - Messages auto-delete after 10 seconds
-- ✅ **Multiple game prevention** - Check before modal AND game start
-
-### **NEW COMMANDS:**
-- `/removebalance @user amount` - Remove balance (admin)
-- `/setbalance @user amount` - Set exact balance (admin)
-- `/cashout minecraft_username` - Request cashout
-
-### **CASHOUT SYSTEM:**
-1. User does `/cashout username`
-2. Request sent to cashout channel
-3. Admin clicks "Confirm Cashout"
-4. User balance reset to 0
-5. User gets DM notification
-
-### **ENVIRONMENT VARIABLE NEEDED:**
-Add to Railway: `CASHOUT_CHANNEL_ID` = your cashout channel ID
-
----
-
-## **GAMBLING GUIDE TEXT:**
-```
-🎰 **WELCOME TO DONUTMARKET CASINO!**
-
-**How to Play:**
-1. Use `/balance` to check your balance
-2. Use `/gamble` to choose a game
-3. Enter your bet (minimum 500K)
-4. Play and win!
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-🪙 **COINFLIP**
-- 50/50 chance
-- Pick Heads or Tails
-- Win = 2x your bet
-- Lose = Lose your bet
-
-🃏 **BLACKJACK**
-- Try to get 21 without going over
-- Beat the dealer's hand
-- Win = 2x your bet
-- Bust = Lose your bet
-
-💣 **MINES**
-- Click tiles to reveal diamonds
-- Avoid the bombs!
-- Cashout anytime to secure winnings
-
-**Mines Difficulty:**
-- 3 Bombs: Easy (Max 2x payout)
-- 5 Bombs: Medium (Max 2.5x payout)
-- 10 Bombs: Hard (Max 3x payout)
-
-━━━━━━━━━━━━━━━━━━━━━━
-
-💰 **CASHOUT:**
-Use `/cashout <minecraft_username>` to withdraw your balance!
-
-⚠️ **Rules:**
-- Minimum bet: 500K
-- One game at a time
-- Exploiting = Ban
-- Have fun & gamble responsibly!
