@@ -356,7 +356,7 @@ class HigherLowerGame {
     constructor(bet, userId) {
         this.bet = bet;
         this.userId = userId;
-        this.currentNumber = Math.floor(Math.random() * 16) + 45;
+        this.currentNumber = Math.floor(Math.random() * 1) + 1;
         this.gameOver = false;
         this.locked = false;
     }
