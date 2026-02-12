@@ -27,9 +27,11 @@ const userLastMessage = new Map();
 const userSpamWarnings = new Map();
 const userBalances = new Map();
 const activeGames = new Map();
+const gameTimeouts = new Map();
 const pendingCashouts = new Map();
 const MEMBER_ROLE_ID = '1442921893786161387';
 const MIN_BET = 500000;
+const GAME_TIMEOUT = 5 * 60 * 1000;
 
 function loadBalances() {
     try {
@@ -146,6 +148,32 @@ function formatAmount(amount) {
     if (amount >= 1000000) return `${(amount / 1000000).toFixed(2)}M`;
     if (amount >= 1000) return `${(amount / 1000).toFixed(2)}K`;
     return amount.toString();
+}
+
+function startGameTimeout(userId, bet) {
+    if (gameTimeouts.has(userId)) {
+        clearTimeout(gameTimeouts.get(userId));
+    }
+    
+    const timeout = setTimeout(() => {
+        if (activeGames.has(userId)) {
+            const game = activeGames.get(userId);
+            activeGames.delete(userId);
+            gameTimeouts.delete(userId);
+            
+            setBalance(userId, getBalance(userId) + bet);
+            console.log(`Game timeout for user ${userId} - refunded ${formatAmount(bet)}`);
+        }
+    }, GAME_TIMEOUT);
+    
+    gameTimeouts.set(userId, timeout);
+}
+
+function clearGameTimeout(userId) {
+    if (gameTimeouts.has(userId)) {
+        clearTimeout(gameTimeouts.get(userId));
+        gameTimeouts.delete(userId);
+    }
 }
 
 function playCoinflip(choice, bet) {
@@ -491,9 +519,7 @@ client.on('interactionCreate', async interaction => {
             return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
         }
 
-        if (activeGames.has(userId)) {
-            return interaction.reply({ content: '❌ You already have an active game! Finish it before starting a new one.', ephemeral: true });
-        }
+        clearGameTimeout(userId);
 
         const betInput = interaction.fields.getTextInputValue('bet_amount');
         const bet = parseAmount(betInput);
@@ -530,11 +556,13 @@ client.on('interactionCreate', async interaction => {
                 );
 
             activeGames.set(userId, { type: 'coinflip', bet });
+            startGameTimeout(userId, bet);
             await interaction.reply({ embeds: [embed], components: [row] });
 
         } else if (gameType === 'blackjack') {
             const game = new BlackjackGame(bet, userId);
             activeGames.set(userId, game);
+            startGameTimeout(userId, bet);
 
             const embed = new EmbedBuilder()
                 .setColor(0x0099ff)
@@ -556,6 +584,7 @@ client.on('interactionCreate', async interaction => {
             const bombs = parseInt(gameType.split('-')[1]);
             const game = new MinesGame(bet, bombs, userId);
             activeGames.set(userId, game);
+            startGameTimeout(userId, bet);
 
             const embed = new EmbedBuilder()
                 .setColor(0x0099ff)
@@ -592,6 +621,7 @@ client.on('interactionCreate', async interaction => {
         } else if (gameType === 'higherlower') {
             const game = new HigherLowerGame(bet, userId);
             activeGames.set(userId, game);
+            startGameTimeout(userId, bet);
 
             const embed = new EmbedBuilder()
                 .setColor(0xe74c3c)
@@ -612,6 +642,7 @@ client.on('interactionCreate', async interaction => {
         } else if (gameType === 'tower') {
             const game = new TowerGame(bet, userId);
             activeGames.set(userId, game);
+            startGameTimeout(userId, bet);
 
             const embed = new EmbedBuilder()
                 .setColor(0x9b59b6)
@@ -671,6 +702,8 @@ client.on('interactionCreate', async interaction => {
             const choice = interaction.values[0];
             const betAmount = parseInt(bet);
             const result = playCoinflip(choice, betAmount);
+
+            clearGameTimeout(userId);
 
             if (result.won) {
                 setBalance(userId, getBalance(userId) + result.payout);
@@ -737,6 +770,8 @@ client.on('interactionCreate', async interaction => {
         if (action === 'higher' || action === 'lower') {
             if (!game) return interaction.reply({ content: '❌ Game not found!', ephemeral: true });
 
+            clearGameTimeout(userId);
+
             const result = game.guess(action);
             if (!result) return interaction.reply({ content: '❌ Action in progress!', ephemeral: true });
 
@@ -772,6 +807,7 @@ client.on('interactionCreate', async interaction => {
                 const payout = game.cashout();
                 if (payout === 0) return interaction.reply({ content: '❌ Cannot cashout at level 0!', ephemeral: true });
 
+                clearGameTimeout(userId);
                 activeGames.delete(userId);
                 setBalance(userId, getBalance(userId) + payout);
 
@@ -802,6 +838,7 @@ client.on('interactionCreate', async interaction => {
             }
 
             if (!result.success) {
+                clearGameTimeout(userId);
                 activeGames.delete(userId);
                 const embed = new EmbedBuilder()
                     .setColor(0xff0000)
@@ -822,6 +859,7 @@ client.on('interactionCreate', async interaction => {
             }
 
             if (result.completed) {
+                clearGameTimeout(userId);
                 activeGames.delete(userId);
                 setBalance(userId, getBalance(userId) + result.payout);
 
@@ -878,6 +916,7 @@ client.on('interactionCreate', async interaction => {
             if (!result) return interaction.reply({ content: '❌ Action already in progress!', ephemeral: true });
 
             if (result.busted) {
+                clearGameTimeout(userId);
                 activeGames.delete(userId);
                 const embed = new EmbedBuilder()
                     .setColor(0xff0000)
@@ -917,6 +956,7 @@ client.on('interactionCreate', async interaction => {
             const result = game.stand();
             if (!result) return interaction.reply({ content: '❌ Action already in progress!', ephemeral: true });
 
+            clearGameTimeout(userId);
             activeGames.delete(userId);
             setBalance(userId, getBalance(userId) + result.payout);
 
@@ -951,6 +991,7 @@ client.on('interactionCreate', async interaction => {
             }
 
             if (result.bomb) {
+                clearGameTimeout(userId);
                 activeGames.delete(userId);
                 const embed = new EmbedBuilder()
                     .setColor(0xff0000)
@@ -1006,6 +1047,7 @@ client.on('interactionCreate', async interaction => {
             const payout = game.cashout();
             if (payout === 0) return interaction.reply({ content: '❌ Cashout failed!', ephemeral: true });
 
+            clearGameTimeout(userId);
             activeGames.delete(userId);
             setBalance(userId, getBalance(userId) + payout);
 
