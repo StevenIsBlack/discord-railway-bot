@@ -633,7 +633,7 @@ client.on('interactionCreate', async interaction => {
                 .setDescription(`**Current Number:** ${game.currentNumber}`)
                 .addFields(
                     { name: 'Bet', value: formatAmount(bet), inline: true },
-                    { name: 'Potential Win', value: formatAmount(bet * 1.5), inline: true }
+                    { name: 'Potential Win', value: formatAmount(bet * 2), inline: true }
                 );
 
             const row = new ActionRowBuilder().addComponents(
