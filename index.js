@@ -511,44 +511,6 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.reply({ embeds: [embed], components: [row] });
 
-        } else if (gameType.startsWith('mines')) {
-            const bombs = parseInt(gameType.split('-')[1]);
-            const game = new MinesGame(bet, bombs, userId);
-            activeGames.set(userId, game);
-            startGameTimeout(userId, bet);
-
-            const embed = new EmbedBuilder()
-                .setColor(0x0099ff)
-                .setTitle('💣 Mines')
-                .setDescription(game.getBoardString())
-                .addFields(
-                    { name: 'Bet', value: formatAmount(bet), inline: true },
-                    { name: 'Bombs', value: `${bombs}`, inline: true },
-                    { name: 'Multiplier', value: `${game.multiplier.toFixed(2)}x`, inline: true }
-                );
-
-            const rows = [];
-            for (let r = 0; r < 5; r++) {
-                const row = new ActionRowBuilder();
-                for (let c = 0; c < 5; c++) {
-                    const pos = r * 5 + c;
-                    row.addComponents(
-                        new ButtonBuilder()
-                            .setCustomId(`mine-${pos}_${userId}`)
-                            .setLabel('?')
-                            .setStyle(ButtonStyle.Secondary)
-                    );
-                }
-                rows.push(row);
-            }
-
-            const cashoutRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`mine-cashout_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
-            );
-            rows.push(cashoutRow);
-
-            await interaction.reply({ embeds: [embed], components: rows });
-
         } else if (gameType === 'higherlower') {
             const game = new HigherLowerGame(bet, userId);
             activeGames.set(userId, game);
@@ -616,7 +578,7 @@ client.on('interactionCreate', async interaction => {
 
             const modal = new ModalBuilder()
                 .setCustomId(`${gameType}_${userId}`)
-                .setTitle(`${gameType === 'coinflip' ? '🪙 Coinflip' : gameType === 'blackjack' ? '🃏 Blackjack' : gameType === 'higherlower' ? '🔢 Higher/Lower' : gameType === 'tower' ? '🗼 Tower' : '💣 Mines'} - Place Bet`);
+                .setTitle(`${gameType === 'coinflip' ? '🪙 Coinflip' : gameType === 'blackjack' ? '🃏 Blackjack' : gameType === 'higherlower' ? '🔢 Higher/Lower' : gameType === 'tower' ? '🗼 Tower' :);
 
             const betInput = new TextInputBuilder()
                 .setCustomId('bet_amount')
@@ -921,17 +883,6 @@ client.on('interactionCreate', async interaction => {
                 return interaction.reply({ content: '❌ Invalid move!', ephemeral: true });
             }
 
-            if (result.bomb) {
-                clearGameTimeout(userId);
-                activeGames.delete(userId);
-                const embed = new EmbedBuilder()
-                    .setColor(0xff0000)
-                    .setTitle('💣 Mines - BOOM!')
-                    .setDescription(game.getBoardString())
-                    .addFields(
-                        { name: 'Result', value: `Hit a bomb! Lost **${formatAmount(game.bet)}**`, inline: false },
-                        { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
-                    );
                 await interaction.update({ embeds: [embed], components: [] });
                 setTimeout(async () => {
                     try {
@@ -941,13 +892,6 @@ client.on('interactionCreate', async interaction => {
                 return;
             }
 
-            const embed = new EmbedBuilder()
-                .setColor(0x00ff00)
-                .setTitle('💎 Mines')
-                .setDescription(game.getBoardString())
-                .addFields(
-                    { name: 'Multiplier', value: `${game.multiplier.toFixed(2)}x`, inline: true },
-                    { name: 'Potential Win', value: formatAmount(Math.floor(game.bet * game.multiplier)), inline: true }
                 );
 
             const rows = [];
@@ -1145,9 +1089,6 @@ client.on('interactionCreate', async interaction => {
                         { name: '🪙 Coinflip', value: '50/50 - **2x payout**', inline: true },
                         { name: '🃏 Blackjack', value: 'Beat dealer - **2x payout**', inline: true },
                         { name: '🔢 Higher/Lower', value: 'Guess next number - **2x payout**', inline: true },
-                        { name: '💣 Mines (3 Bombs)', value: 'Easy - **Max 2x**', inline: true },
-                        { name: '💣 Mines (5 Bombs)', value: 'Medium - **Max 2.5x**', inline: true },
-                        { name: '💣 Mines (10 Bombs)', value: 'Hard - **Max 3x**', inline: true },
                         { name: '🗼 Tower', value: 'Climb 10 levels - **Max 10x**', inline: true }
                     );
 
