@@ -1,5 +1,7 @@
 const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits } = require('discord.js');
 const axios = require('axios');
+const fs = require('fs');
+const path = require('path');
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const BOT_API_URL = process.env.BOT_API_URL;
@@ -20,6 +22,7 @@ const client = new Client({
     ]
 });
 
+const BALANCE_FILE = path.join(__dirname, 'balances.json');
 const userLastMessage = new Map();
 const userSpamWarnings = new Map();
 const userBalances = new Map();
@@ -27,6 +30,32 @@ const activeGames = new Map();
 const pendingCashouts = new Map();
 const MEMBER_ROLE_ID = '1442921893786161387';
 const MIN_BET = 500000;
+
+function loadBalances() {
+    try {
+        if (fs.existsSync(BALANCE_FILE)) {
+            const data = JSON.parse(fs.readFileSync(BALANCE_FILE, 'utf8'));
+            Object.entries(data).forEach(([userId, balance]) => {
+                userBalances.set(userId, balance);
+            });
+            console.log(`✅ Loaded ${userBalances.size} user balances`);
+        }
+    } catch (error) {
+        console.error('Failed to load balances:', error);
+    }
+}
+
+function saveBalances() {
+    try {
+        const data = {};
+        userBalances.forEach((balance, userId) => {
+            data[userId] = balance;
+        });
+        fs.writeFileSync(BALANCE_FILE, JSON.stringify(data, null, 2));
+    } catch (error) {
+        console.error('Failed to save balances:', error);
+    }
+}
 
 const commands = [
     new SlashCommandBuilder().setName('vouch').setDescription('Vouching information'),
@@ -93,6 +122,7 @@ function getBalance(userId) {
 
 function setBalance(userId, amount) {
     userBalances.set(userId, Math.max(0, Math.floor(amount)));
+    saveBalances();
 }
 
 function hasRole(member, roleId) {
@@ -131,6 +161,11 @@ class BlackjackGame {
         this.deck = this.createDeck();
         this.playerHand = [this.drawCard(), this.drawCard()];
         this.dealerHand = [this.drawCard(), this.drawCard()];
+        
+        while (this.calculateValue(this.playerHand) === 21) {
+            this.playerHand = [this.drawCard(), this.drawCard()];
+        }
+        
         this.gameOver = false;
         this.locked = false;
     }
@@ -215,10 +250,7 @@ class BlackjackGame {
         return { result: 'push', payout: this.bet };
     }
 
-    handToString(hand, hideFirst = false) {
-        if (hideFirst) {
-            return `[Hidden] ${hand[1].value}${hand[1].suit}`;
-        }
+    handToString(hand) {
         return hand.map(c => `${c.value}${c.suit}`).join(' ');
     }
 }
@@ -292,9 +324,97 @@ class MinesGame {
     }
 }
 
+class HigherLowerGame {
+    constructor(bet, userId) {
+        this.bet = bet;
+        this.userId = userId;
+        this.currentNumber = Math.floor(Math.random() * 100) + 1;
+        this.gameOver = false;
+        this.locked = false;
+    }
+
+    guess(choice) {
+        if (this.gameOver || this.locked) return null;
+        this.locked = true;
+        
+        const nextNumber = Math.floor(Math.random() * 100) + 1;
+        const isHigher = nextNumber > this.currentNumber;
+        const won = (choice === 'higher' && isHigher) || (choice === 'lower' && !isHigher);
+        
+        this.gameOver = true;
+        return {
+            won,
+            currentNumber: this.currentNumber,
+            nextNumber,
+            payout: won ? this.bet * 2 : 0
+        };
+    }
+}
+
+class TowerGame {
+    constructor(bet, userId) {
+        this.bet = bet;
+        this.userId = userId;
+        this.currentLevel = 0;
+        this.maxLevels = 10;
+        this.board = this.createBoard();
+        this.gameOver = false;
+        this.locked = false;
+        this.multipliers = [1.0, 1.3, 1.6, 2.0, 2.5, 3.0, 4.0, 5.0, 7.0, 10.0];
+    }
+
+    createBoard() {
+        const board = [];
+        for (let i = 0; i < this.maxLevels; i++) {
+            const safePos = Math.floor(Math.random() * 3);
+            board.push(safePos);
+        }
+        return board;
+    }
+
+    chooseTile(position) {
+        if (this.gameOver || this.locked || position < 0 || position > 2) {
+            return { valid: false };
+        }
+
+        this.locked = true;
+        const safePosition = this.board[this.currentLevel];
+        
+        if (position !== safePosition) {
+            this.gameOver = true;
+            this.locked = false;
+            return { valid: true, success: false, payout: 0, level: this.currentLevel };
+        }
+
+        this.currentLevel++;
+        
+        if (this.currentLevel >= this.maxLevels) {
+            this.gameOver = true;
+            const payout = Math.floor(this.bet * this.multipliers[this.maxLevels - 1]);
+            return { valid: true, success: true, completed: true, payout, level: this.currentLevel };
+        }
+
+        this.locked = false;
+        return { valid: true, success: true, completed: false, level: this.currentLevel };
+    }
+
+    cashout() {
+        if (this.gameOver || this.locked || this.currentLevel === 0) return 0;
+        this.locked = true;
+        this.gameOver = true;
+        return Math.floor(this.bet * this.multipliers[this.currentLevel - 1]);
+    }
+
+    getMultiplier() {
+        if (this.currentLevel === 0) return 1.0;
+        return this.multipliers[this.currentLevel - 1];
+    }
+}
+
 client.on('ready', () => {
+    loadBalances();
     console.log(`✅ ${client.user.tag}`);
-    client.user.setActivity('/help for commands', { type: 3 });
+    client.user.setActivity('/gamble to play!', { type: 0 });
 });
 
 client.on('messageCreate', async (message) => {
@@ -409,9 +529,8 @@ client.on('interactionCreate', async interaction => {
                     { name: 'Potential Win', value: formatAmount(bet * 2), inline: true }
                 );
 
-            activeGames.set(userId, { type: 'coinflip', bet, messageId: null });
-            const msg = await interaction.reply({ embeds: [embed], components: [row], fetchReply: true });
-            activeGames.get(userId).messageId = msg.id;
+            activeGames.set(userId, { type: 'coinflip', bet });
+            await interaction.reply({ embeds: [embed], components: [row] });
 
         } else if (gameType === 'blackjack') {
             const game = new BlackjackGame(bet, userId);
@@ -422,7 +541,7 @@ client.on('interactionCreate', async interaction => {
                 .setTitle('🃏 Blackjack')
                 .addFields(
                     { name: 'Your Hand', value: `${game.handToString(game.playerHand)} (${game.calculateValue(game.playerHand)})`, inline: true },
-                    { name: 'Dealer Hand', value: `${game.handToString(game.dealerHand, true)}`, inline: true },
+                    { name: 'Dealer Hand', value: `${game.handToString(game.dealerHand)} (${game.calculateValue(game.dealerHand)})`, inline: true },
                     { name: 'Bet', value: formatAmount(bet), inline: false }
                 );
 
@@ -463,7 +582,59 @@ client.on('interactionCreate', async interaction => {
                 rows.push(row);
             }
 
+            const cashoutRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`mine-cashout_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
+            );
+            rows.push(cashoutRow);
+
             await interaction.reply({ embeds: [embed], components: rows });
+
+        } else if (gameType === 'higherlower') {
+            const game = new HigherLowerGame(bet, userId);
+            activeGames.set(userId, game);
+
+            const embed = new EmbedBuilder()
+                .setColor(0xe74c3c)
+                .setTitle('🔢 Higher or Lower')
+                .setDescription(`**Current Number:** ${game.currentNumber}`)
+                .addFields(
+                    { name: 'Bet', value: formatAmount(bet), inline: true },
+                    { name: 'Potential Win', value: formatAmount(bet * 2), inline: true }
+                );
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`higher_${userId}`).setLabel('📈 Higher').setStyle(ButtonStyle.Success),
+                new ButtonBuilder().setCustomId(`lower_${userId}`).setLabel('📉 Lower').setStyle(ButtonStyle.Danger)
+            );
+
+            await interaction.reply({ embeds: [embed], components: [row] });
+
+        } else if (gameType === 'tower') {
+            const game = new TowerGame(bet, userId);
+            activeGames.set(userId, game);
+
+            const embed = new EmbedBuilder()
+                .setColor(0x9b59b6)
+                .setTitle('🗼 Tower')
+                .setDescription(`**Level:** ${game.currentLevel + 1}/${game.maxLevels}`)
+                .addFields(
+                    { name: 'Bet', value: formatAmount(bet), inline: true },
+                    { name: 'Current Multiplier', value: `${game.getMultiplier().toFixed(2)}x`, inline: true },
+                    { name: 'Potential Win', value: formatAmount(Math.floor(bet * game.getMultiplier())), inline: true }
+                )
+                .setFooter({ text: 'Choose the safe tile! One wrong move = game over' });
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`tower-0_${userId}`).setLabel('Tile 1').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId(`tower-1_${userId}`).setLabel('Tile 2').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId(`tower-2_${userId}`).setLabel('Tile 3').setStyle(ButtonStyle.Secondary)
+            );
+
+            const cashoutRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`tower-cashout_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
+            );
+
+            await interaction.reply({ embeds: [embed], components: [row, cashoutRow] });
         }
     }
 
@@ -483,7 +654,7 @@ client.on('interactionCreate', async interaction => {
 
             const modal = new ModalBuilder()
                 .setCustomId(`${gameType}_${userId}`)
-                .setTitle(`${gameType === 'coinflip' ? '🪙 Coinflip' : gameType === 'blackjack' ? '🃏 Blackjack' : '💣 Mines'} - Place Bet`);
+                .setTitle(`${gameType === 'coinflip' ? '🪙 Coinflip' : gameType === 'blackjack' ? '🃏 Blackjack' : gameType === 'higherlower' ? '🔢 Higher/Lower' : gameType === 'tower' ? '🗼 Tower' : '💣 Mines'} - Place Bet`);
 
             const betInput = new TextInputBuilder()
                 .setCustomId('bet_amount')
@@ -562,7 +733,143 @@ client.on('interactionCreate', async interaction => {
         }
 
         const game = activeGames.get(userId);
-        if (!game && !action.startsWith('mine')) {
+
+        if (action === 'higher' || action === 'lower') {
+            if (!game) return interaction.reply({ content: '❌ Game not found!', ephemeral: true });
+
+            const result = game.guess(action);
+            if (!result) return interaction.reply({ content: '❌ Action in progress!', ephemeral: true });
+
+            activeGames.delete(userId);
+            if (result.won) {
+                setBalance(userId, getBalance(userId) + result.payout);
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(result.won ? 0x00ff00 : 0xff0000)
+                .setTitle(`🔢 Higher or Lower - ${result.won ? 'WIN!' : 'LOSE!'}`)
+                .addFields(
+                    { name: 'Current Number', value: `${result.currentNumber}`, inline: true },
+                    { name: 'Next Number', value: `${result.nextNumber}`, inline: true },
+                    { name: 'Your Guess', value: action === 'higher' ? '📈 Higher' : '📉 Lower', inline: true },
+                    { name: result.won ? 'Won' : 'Lost', value: formatAmount(game.bet), inline: true },
+                    { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: true }
+                );
+
+            await interaction.update({ embeds: [embed], components: [] });
+            setTimeout(async () => {
+                try {
+                    await interaction.deleteReply();
+                } catch {}
+            }, 10000);
+            return;
+        }
+
+        if (action.startsWith('tower')) {
+            if (!game) return interaction.reply({ content: '❌ Game not found!', ephemeral: true });
+
+            if (action === 'tower-cashout') {
+                const payout = game.cashout();
+                if (payout === 0) return interaction.reply({ content: '❌ Cannot cashout at level 0!', ephemeral: true });
+
+                activeGames.delete(userId);
+                setBalance(userId, getBalance(userId) + payout);
+
+                const embed = new EmbedBuilder()
+                    .setColor(0x00ff00)
+                    .setTitle('🗼 Tower - Cashed Out!')
+                    .addFields(
+                        { name: 'Level Reached', value: `${game.currentLevel}/${game.maxLevels}`, inline: true },
+                        { name: 'Multiplier', value: `${game.getMultiplier().toFixed(2)}x`, inline: true },
+                        { name: 'Winnings', value: formatAmount(payout), inline: true },
+                        { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
+                    );
+
+                await interaction.update({ embeds: [embed], components: [] });
+                setTimeout(async () => {
+                    try {
+                        await interaction.deleteReply();
+                    } catch {}
+                }, 10000);
+                return;
+            }
+
+            const tileNum = parseInt(action.split('-')[1]);
+            const result = game.chooseTile(tileNum);
+
+            if (!result.valid) {
+                return interaction.reply({ content: '❌ Invalid move!', ephemeral: true });
+            }
+
+            if (!result.success) {
+                activeGames.delete(userId);
+                const embed = new EmbedBuilder()
+                    .setColor(0xff0000)
+                    .setTitle('🗼 Tower - FAILED!')
+                    .setDescription(`You chose the wrong tile at level ${result.level + 1}!`)
+                    .addFields(
+                        { name: 'Lost', value: formatAmount(game.bet), inline: true },
+                        { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: true }
+                    );
+
+                await interaction.update({ embeds: [embed], components: [] });
+                setTimeout(async () => {
+                    try {
+                        await interaction.deleteReply();
+                    } catch {}
+                }, 10000);
+                return;
+            }
+
+            if (result.completed) {
+                activeGames.delete(userId);
+                setBalance(userId, getBalance(userId) + result.payout);
+
+                const embed = new EmbedBuilder()
+                    .setColor(0xffd700)
+                    .setTitle('🗼 Tower - COMPLETED!')
+                    .setDescription('🎉 You reached the top!')
+                    .addFields(
+                        { name: 'Final Multiplier', value: `${game.getMultiplier().toFixed(2)}x`, inline: true },
+                        { name: 'Winnings', value: formatAmount(result.payout), inline: true },
+                        { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
+                    );
+
+                await interaction.update({ embeds: [embed], components: [] });
+                setTimeout(async () => {
+                    try {
+                        await interaction.deleteReply();
+                    } catch {}
+                }, 10000);
+                return;
+            }
+
+            const embed = new EmbedBuilder()
+                .setColor(0x00ff00)
+                .setTitle('🗼 Tower')
+                .setDescription(`✅ Correct! **Level:** ${game.currentLevel + 1}/${game.maxLevels}`)
+                .addFields(
+                    { name: 'Bet', value: formatAmount(game.bet), inline: true },
+                    { name: 'Current Multiplier', value: `${game.getMultiplier().toFixed(2)}x`, inline: true },
+                    { name: 'Potential Win', value: formatAmount(Math.floor(game.bet * game.getMultiplier())), inline: true }
+                )
+                .setFooter({ text: 'Keep climbing or cashout!' });
+
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`tower-0_${userId}`).setLabel('Tile 1').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId(`tower-1_${userId}`).setLabel('Tile 2').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId(`tower-2_${userId}`).setLabel('Tile 3').setStyle(ButtonStyle.Secondary)
+            );
+
+            const cashoutRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`tower-cashout_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success)
+            );
+
+            await interaction.update({ embeds: [embed], components: [row, cashoutRow] });
+            return;
+        }
+
+        if (!game && action !== 'mine-cashout') {
             return interaction.reply({ content: '❌ Game not found!', ephemeral: true });
         }
 
@@ -595,7 +902,7 @@ client.on('interactionCreate', async interaction => {
                 .setTitle('🃏 Blackjack')
                 .addFields(
                     { name: 'Your Hand', value: `${game.handToString(game.playerHand)} (${game.calculateValue(game.playerHand)})`, inline: true },
-                    { name: 'Dealer Hand', value: `${game.handToString(game.dealerHand, true)}`, inline: true }
+                    { name: 'Dealer Hand', value: `${game.handToString(game.dealerHand)} (${game.calculateValue(game.dealerHand)})`, inline: true }
                 );
 
             const row = new ActionRowBuilder().addComponents(
@@ -688,14 +995,14 @@ client.on('interactionCreate', async interaction => {
             }
 
             const cashoutRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`cashout_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success)
+                new ButtonBuilder().setCustomId(`mine-cashout_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success)
             );
             rows.push(cashoutRow);
 
             return interaction.update({ embeds: [embed], components: rows });
         }
 
-        if (action === 'cashout') {
+        if (action === 'mine-cashout') {
             const payout = game.cashout();
             if (payout === 0) return interaction.reply({ content: '❌ Cashout failed!', ephemeral: true });
 
@@ -862,11 +1169,13 @@ client.on('interactionCreate', async interaction => {
                     .setTitle('🎰 Welcome to the Casino!')
                     .setDescription(`**Your Balance:** ${formatAmount(balance)}\n**Minimum Bet:** ${formatAmount(MIN_BET)}\n\n**Choose your game:**`)
                     .addFields(
-                        { name: '🪙 Coinflip', value: 'Double or nothing! 50/50 chance.\n**Payout:** 2x', inline: true },
-                        { name: '🃏 Blackjack', value: 'Beat the dealer to 21!\n**Payout:** 2x', inline: true },
-                        { name: '💣 Mines (3 Bombs)', value: 'Find diamonds, avoid bombs!\n**Max Payout:** 2x', inline: true },
-                        { name: '💣 Mines (5 Bombs)', value: 'Higher risk, higher reward!\n**Max Payout:** 2.5x', inline: true },
-                        { name: '💣 Mines (10 Bombs)', value: 'Expert mode!\n**Max Payout:** 3x', inline: true }
+                        { name: '🪙 Coinflip', value: '50/50 - **2x payout**', inline: true },
+                        { name: '🃏 Blackjack', value: 'Beat dealer - **2x payout**', inline: true },
+                        { name: '🔢 Higher/Lower', value: 'Guess next number - **2x payout**', inline: true },
+                        { name: '💣 Mines (3 Bombs)', value: 'Easy - **Max 2x**', inline: true },
+                        { name: '💣 Mines (5 Bombs)', value: 'Medium - **Max 2.5x**', inline: true },
+                        { name: '💣 Mines (10 Bombs)', value: 'Hard - **Max 3x**', inline: true },
+                        { name: '🗼 Tower', value: 'Climb 10 levels - **Max 10x**', inline: true }
                     );
 
                 const row = new ActionRowBuilder().addComponents(
@@ -874,11 +1183,13 @@ client.on('interactionCreate', async interaction => {
                         .setCustomId(`game-select_${interaction.user.id}`)
                         .setPlaceholder('🎲 Choose a game to play')
                         .addOptions([
-                            { label: 'Coinflip', value: 'coinflip', description: '50/50 - Double or nothing (2x)', emoji: '🪙' },
-                            { label: 'Blackjack', value: 'blackjack', description: 'Beat the dealer to 21 (2x)', emoji: '🃏' },
-                            { label: 'Mines (3 Bombs)', value: 'mines-3', description: 'Easy mode - Max 2x', emoji: '💣' },
-                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Medium mode - Max 2.5x', emoji: '💣' },
-                            { label: 'Mines (10 Bombs)', value: 'mines-10', description: 'Hard mode - Max 3x', emoji: '💣' }
+                            { label: 'Coinflip', value: 'coinflip', description: '50/50 - 2x', emoji: '🪙' },
+                            { label: 'Blackjack', value: 'blackjack', description: 'Beat the dealer - 2x', emoji: '🃏' },
+                            { label: 'Higher/Lower', value: 'higherlower', description: 'Guess next number - 2x', emoji: '🔢' },
+                            { label: 'Mines (3 Bombs)', value: 'mines-3', description: 'Easy - Max 2x', emoji: '💣' },
+                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Medium - Max 2.5x', emoji: '💣' },
+                            { label: 'Mines (10 Bombs)', value: 'mines-10', description: 'Hard - Max 3x', emoji: '💣' },
+                            { label: 'Tower', value: 'tower', description: 'Climb to top - Max 10x', emoji: '🗼' }
                         ])
                 );
 
