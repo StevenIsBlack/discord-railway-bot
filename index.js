@@ -177,7 +177,7 @@ function clearGameTimeout(userId) {
 }
 
 function playCoinflip(choice, bet) {
-    const result = Math.random() < 0.5 ? 'heads' : 'tails';
+    const result = Math.random() < 0.4 ? 'heads' : 'tails';
     const won = result === choice;
     return { result, won, payout: won ? bet * 2 : 0 };
 }
@@ -356,7 +356,7 @@ class HigherLowerGame {
     constructor(bet, userId) {
         this.bet = bet;
         this.userId = userId;
-        this.currentNumber = Math.floor(Math.random() * 100) + 1;
+        this.currentNumber = Math.floor(Math.random() * 16) + 45;
         this.gameOver = false;
         this.locked = false;
     }
