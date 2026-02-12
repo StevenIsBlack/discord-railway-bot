@@ -356,8 +356,8 @@ class HigherLowerGame {
     constructor(bet, userId) {
         this.bet = bet;
         this.userId = userId;
-        // Generates a random number between 45 and 55
-        this.currentNumber = Math.floor(Math.random() * 11) + 45; 
+        // Sets the starting number exactly to 5
+        this.currentNumber = 5; 
         this.gameOver = false;
         this.locked = false;
     }
@@ -366,8 +366,11 @@ class HigherLowerGame {
         if (this.gameOver || this.locked) return null;
         this.locked = true;
         
-        const nextNumber = Math.floor(Math.random() * 100) + 1;
+        // Generates a random number between 1 and 10
+        const nextNumber = Math.floor(Math.random() * 10) + 1;
+        
         const isHigher = nextNumber > this.currentNumber;
+        // Note: If nextNumber equals currentNumber, 'lower' wins by default in your logic
         const won = (choice === 'higher' && isHigher) || (choice === 'lower' && !isHigher);
         
         this.gameOver = true;
@@ -630,7 +633,7 @@ client.on('interactionCreate', async interaction => {
                 .setDescription(`**Current Number:** ${game.currentNumber}`)
                 .addFields(
                     { name: 'Bet', value: formatAmount(bet), inline: true },
-                    { name: 'Potential Win', value: formatAmount(bet * 2), inline: true }
+                    { name: 'Potential Win', value: formatAmount(bet * 1.5), inline: true }
                 );
 
             const row = new ActionRowBuilder().addComponents(
