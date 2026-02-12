@@ -283,6 +283,75 @@ class BlackjackGame {
     }
 }
 
+class MinesGame {
+    constructor(bet, bombCount, userId) {
+        this.bet = bet;
+        this.userId = userId;
+        this.bombCount = bombCount;
+        this.board = this.createBoard();
+        this.revealed = new Set();
+        this.gameOver = false;
+        this.multiplier = 1.0;
+        this.locked = false;
+        
+        if (bombCount === 3) this.multiplierIncrement = 0.05;
+        else if (bombCount === 5) this.multiplierIncrement = 0.0625;
+        else if (bombCount === 10) this.multiplierIncrement = 0.133;
+    }
+
+    createBoard() {
+        const board = Array(25).fill(false);
+        const bombPositions = new Set();
+        while (bombPositions.size < this.bombCount) {
+            bombPositions.add(Math.floor(Math.random() * 25));
+        }
+        bombPositions.forEach(pos => board[pos] = true);
+        return board;
+    }
+
+    reveal(position) {
+        if (this.revealed.has(position) || this.gameOver || this.locked || position < 0 || position > 24) {
+            return { valid: false };
+        }
+
+        this.locked = true;
+        this.revealed.add(position);
+        
+        if (this.board[position]) {
+            this.gameOver = true;
+            this.locked = false;
+            return { valid: true, bomb: true, payout: 0 };
+        }
+
+        this.multiplier += this.multiplierIncrement;
+        this.locked = false;
+        return { valid: true, bomb: false, canCashout: true };
+    }
+
+    cashout() {
+        if (this.gameOver || this.locked) return 0;
+        this.locked = true;
+        this.gameOver = true;
+        return Math.floor(this.bet * this.multiplier);
+    }
+
+    getBoardString() {
+        let str = '';
+        for (let i = 0; i < 25; i++) {
+            if (i % 5 === 0 && i !== 0) str += '\n';
+            if (this.revealed.has(i)) {
+                str += this.board[i] ? '💣' : '💎';
+            } else if (this.gameOver) {
+                str += this.board[i] ? '💣' : '⬜';
+            } else {
+                str += '⬜';
+            }
+            str += ' ';
+        }
+        return str;
+    }
+}
+
 class HigherLowerGame {
     constructor(bet, userId) {
         this.bet = bet;
@@ -511,6 +580,44 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.reply({ embeds: [embed], components: [row] });
 
+        } else if (gameType.startsWith('mines')) {
+            const bombs = parseInt(gameType.split('-')[1]);
+            const game = new MinesGame(bet, bombs, userId);
+            activeGames.set(userId, game);
+            startGameTimeout(userId, bet);
+
+            const embed = new EmbedBuilder()
+                .setColor(0x0099ff)
+                .setTitle('💣 Mines')
+                .setDescription(game.getBoardString())
+                .addFields(
+                    { name: 'Bet', value: formatAmount(bet), inline: true },
+                    { name: 'Bombs', value: `${bombs}`, inline: true },
+                    { name: 'Multiplier', value: `${game.multiplier.toFixed(2)}x`, inline: true }
+                );
+
+            const rows = [];
+            for (let r = 0; r < 5; r++) {
+                const row = new ActionRowBuilder();
+                for (let c = 0; c < 5; c++) {
+                    const pos = r * 5 + c;
+                    row.addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`mine-${pos}_${userId}`)
+                            .setLabel('?')
+                            .setStyle(ButtonStyle.Secondary)
+                    );
+                }
+                rows.push(row);
+            }
+
+            const cashoutRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`mine-cashout_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
+            );
+            rows.push(cashoutRow);
+
+            await interaction.reply({ embeds: [embed], components: rows });
+
         } else if (gameType === 'higherlower') {
             const game = new HigherLowerGame(bet, userId);
             activeGames.set(userId, game);
@@ -578,7 +685,7 @@ client.on('interactionCreate', async interaction => {
 
             const modal = new ModalBuilder()
                 .setCustomId(`${gameType}_${userId}`)
-                .setTitle(`${gameType === 'coinflip' ? '🪙 Coinflip' : gameType === 'blackjack' ? '🃏 Blackjack' : gameType === 'higherlower' ? '🔢 Higher/Lower' : gameType === 'tower' ? '🗼 Tower' :);
+                .setTitle(`${gameType === 'coinflip' ? '🪙 Coinflip' : gameType === 'blackjack' ? '🃏 Blackjack' : gameType === 'higherlower' ? '🔢 Higher/Lower' : gameType === 'tower' ? '🗼 Tower' : '💣 Mines'} - Place Bet`);
 
             const betInput = new TextInputBuilder()
                 .setCustomId('bet_amount')
@@ -883,6 +990,17 @@ client.on('interactionCreate', async interaction => {
                 return interaction.reply({ content: '❌ Invalid move!', ephemeral: true });
             }
 
+            if (result.bomb) {
+                clearGameTimeout(userId);
+                activeGames.delete(userId);
+                const embed = new EmbedBuilder()
+                    .setColor(0xff0000)
+                    .setTitle('💣 Mines - BOOM!')
+                    .setDescription(game.getBoardString())
+                    .addFields(
+                        { name: 'Result', value: `Hit a bomb! Lost **${formatAmount(game.bet)}**`, inline: false },
+                        { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
+                    );
                 await interaction.update({ embeds: [embed], components: [] });
                 setTimeout(async () => {
                     try {
@@ -892,6 +1010,13 @@ client.on('interactionCreate', async interaction => {
                 return;
             }
 
+            const embed = new EmbedBuilder()
+                .setColor(0x00ff00)
+                .setTitle('💎 Mines')
+                .setDescription(game.getBoardString())
+                .addFields(
+                    { name: 'Multiplier', value: `${game.multiplier.toFixed(2)}x`, inline: true },
+                    { name: 'Potential Win', value: formatAmount(Math.floor(game.bet * game.multiplier)), inline: true }
                 );
 
             const rows = [];
