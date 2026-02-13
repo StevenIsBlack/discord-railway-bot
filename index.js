@@ -281,7 +281,13 @@ class BlackjackGame {
     }
     
     getDealerVisibleHand() {
-        return `${this.dealerHand[0].value}${this.dealerHand[0].suit} [Hidden]`;
+        const firstCard = this.dealerHand[0];
+        let value;
+        if (firstCard.value === 'A') value = 11;
+        else if (['J', 'Q', 'K'].includes(firstCard.value)) value = 10;
+        else value = parseInt(firstCard.value);
+        
+        return `${firstCard.value}${firstCard.suit} (${value}) • [Hidden]`;
     }
 }
 
@@ -523,7 +529,7 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.isModalSubmit()) {
         try {
-            await interaction.deferReply();
+            await interaction.deferReply({ ephemeral: false });
             console.log('Modal deferred successfully');
             
             const parts = interaction.customId.split('_');
