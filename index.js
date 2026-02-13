@@ -308,13 +308,13 @@ class MinesGame {
         // 10 bombs: 14 safe tiles, max 10x
         if (bombCount === 3) {
             this.multiplierIncrement = 4.0 / 21; // (5-1) / 21 safe tiles
-            this.maxMultiplier = 5.0;
+            this.maxMultiplier = 3.0;
         } else if (bombCount === 5) {
             this.multiplierIncrement = 6.0 / 19; // (7-1) / 19 safe tiles
-            this.maxMultiplier = 7.0;
+            this.maxMultiplier = 4.0;
         } else if (bombCount === 10) {
             this.multiplierIncrement = 9.0 / 14; // (10-1) / 14 safe tiles
-            this.maxMultiplier = 10.0;
+            this.maxMultiplier = 4.0;
         }
     }
 
@@ -1563,9 +1563,9 @@ client.on('interactionCreate', async interaction => {
                         { name: '🪙 Coinflip', value: '50/50 - **2x payout**', inline: true },
                         { name: '🃏 Blackjack', value: 'Beat dealer - **2x payout**', inline: true },
                         { name: '🔢 Higher/Lower', value: 'Guess next number - **2x payout**', inline: true },
-                        { name: '💣 Mines (3 Bombs)', value: 'Easy - **Max 5x**', inline: true },
-                        { name: '💣 Mines (5 Bombs)', value: 'Medium - **Max 7x**', inline: true },
-                        { name: '💣 Mines (10 Bombs)', value: 'Hard - **Max 10x**', inline: true },
+                        { name: '💣 Mines (3 Bombs)', value: 'Easy - **Max 3x**', inline: true },
+                        { name: '💣 Mines (5 Bombs)', value: 'Medium - **Max 4x**', inline: true },
+                        { name: '💣 Mines (10 Bombs)', value: 'Hard - **Max 5x**', inline: true },
                         { name: '🗼 Tower', value: 'Climb 10 levels - **Max 10x**', inline: true }
                     );
 
