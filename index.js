@@ -28,10 +28,11 @@ const userSpamWarnings = new Map();
 const userBalances = new Map();
 const activeGames = new Map();
 const gameTimeouts = new Map();
+const messageDeleteTimeouts = new Map();
 const pendingCashouts = new Map();
 const MEMBER_ROLE_ID = '1442921893786161387';
 const MIN_BET = 500000;
-const GAME_TIMEOUT = 5 * 60 * 1000;
+const GAME_TIMEOUT = 60 * 1000; // 1 minute for inactive games
 
 function loadBalances() {
     try {
@@ -150,17 +151,25 @@ function formatAmount(amount) {
     return amount.toString();
 }
 
-function startGameTimeout(userId, bet) {
+function startGameTimeout(userId, bet, interaction) {
     if (gameTimeouts.has(userId)) {
         clearTimeout(gameTimeouts.get(userId));
     }
     
-    const timeout = setTimeout(() => {
+    const timeout = setTimeout(async () => {
         if (activeGames.has(userId)) {
             activeGames.delete(userId);
             gameTimeouts.delete(userId);
             setBalance(userId, getBalance(userId) + bet);
             console.log(`Game timeout for user ${userId} - refunded ${formatAmount(bet)}`);
+            
+            // Delete the entire message after 1 minute of inactivity
+            try {
+                await interaction.deleteReply();
+                console.log(`Deleted inactive game message for user ${userId}`);
+            } catch (error) {
+                console.log(`Could not delete message:`, error.message);
+            }
         }
     }, GAME_TIMEOUT);
     
@@ -171,6 +180,32 @@ function clearGameTimeout(userId) {
     if (gameTimeouts.has(userId)) {
         clearTimeout(gameTimeouts.get(userId));
         gameTimeouts.delete(userId);
+    }
+}
+
+function startMessageDeleteTimeout(userId, interaction) {
+    // Clear any existing timeout
+    if (messageDeleteTimeouts.has(userId)) {
+        clearTimeout(messageDeleteTimeouts.get(userId));
+    }
+    
+    // Delete full message after 60 seconds
+    const timeout = startMessageDeleteTimeout(userId, interaction);
+        try {
+            await interaction.deleteReply();
+            messageDeleteTimeouts.delete(userId);
+        } catch (error) {
+            console.log('Could not delete message:', error.message);
+        }
+    }, 60000);
+    
+    messageDeleteTimeouts.set(userId, timeout);
+}
+
+function clearMessageDeleteTimeout(userId) {
+    if (messageDeleteTimeouts.has(userId)) {
+        clearTimeout(messageDeleteTimeouts.get(userId));
+        messageDeleteTimeouts.delete(userId);
     }
 }
 
@@ -303,18 +338,18 @@ class MinesGame {
         this.locked = false;
         
         // Calculate increments based on max multipliers
-        // 3 bombs: 21 safe tiles, max 5x
-        // 5 bombs: 19 safe tiles, max 7x
-        // 10 bombs: 14 safe tiles, max 10x
-        if (bombCount === 3) {
-            this.multiplierIncrement = 4.0 / 21; // (5-1) / 21 safe tiles
+        // 5 bombs: 19 safe tiles, max 3x
+        // 8 bombs: 16 safe tiles, max 4x
+        // 14 bombs: 10 safe tiles, max 5x
+        if (bombCount === 5) {
+            this.multiplierIncrement = 2.0 / 19; // (3-1) / 19 safe tiles
             this.maxMultiplier = 3.0;
-        } else if (bombCount === 5) {
-            this.multiplierIncrement = 6.0 / 19; // (7-1) / 19 safe tiles
+        } else if (bombCount === 8) {
+            this.multiplierIncrement = 3.0 / 16; // (4-1) / 16 safe tiles
             this.maxMultiplier = 4.0;
-        } else if (bombCount === 10) {
-            this.multiplierIncrement = 9.0 / 14; // (10-1) / 14 safe tiles
-            this.maxMultiplier = 4.0;
+        } else if (bombCount === 14) {
+            this.multiplierIncrement = 4.0 / 10; // (5-1) / 10 safe tiles
+            this.maxMultiplier = 5.0;
         }
     }
 
@@ -532,7 +567,7 @@ client.on('messageCreate', async (message) => {
         if (userLastMessage.get(userId) === content) {
             userLastMessage.delete(userId);
         }
-    }, 30000);
+    }, 60000);
 });
 
 client.on('interactionCreate', async interaction => {
@@ -594,13 +629,13 @@ client.on('interactionCreate', async interaction => {
                 );
 
             activeGames.set(userId, { type: 'coinflip', bet });
-            startGameTimeout(userId, bet);
+            startGameTimeout(userId, bet, interaction);
             await interaction.editReply({ embeds: [embed], components: [row] });
 
             } else if (gameType === 'blackjack') {
             const game = new BlackjackGame(bet, userId);
             activeGames.set(userId, game);
-            startGameTimeout(userId, bet);
+            startGameTimeout(userId, bet, interaction);
 
             const embed = new EmbedBuilder()
                 .setColor(0x0099ff)
@@ -626,7 +661,7 @@ client.on('interactionCreate', async interaction => {
             const game = new MinesGame(bet, bombs, userId);
             console.log('Mines game created');
             activeGames.set(userId, game);
-            startGameTimeout(userId, bet);
+            startGameTimeout(userId, bet, interaction);
             console.log('Game stored and timeout started');
 
             const embed = new EmbedBuilder()
@@ -680,7 +715,7 @@ client.on('interactionCreate', async interaction => {
             } else if (gameType === 'higherlower') {
             const game = new HigherLowerGame(bet, userId);
             activeGames.set(userId, game);
-            startGameTimeout(userId, bet);
+            startGameTimeout(userId, bet, interaction);
 
             const embed = new EmbedBuilder()
                 .setColor(0xe74c3c)
@@ -702,7 +737,7 @@ client.on('interactionCreate', async interaction => {
             } else if (gameType === 'tower') {
             const game = new TowerGame(bet, userId);
             activeGames.set(userId, game);
-            startGameTimeout(userId, bet);
+            startGameTimeout(userId, bet, interaction);
 
             const embed = new EmbedBuilder()
                 .setColor(0x9b59b6)
@@ -797,11 +832,7 @@ client.on('interactionCreate', async interaction => {
 
             activeGames.delete(userId);
             await interaction.update({ embeds: [embed], components: [retryRow] });
-            setTimeout(async () => {
-                try {
-                    await interaction.editReply({ components: [] });
-                } catch {}
-            }, 30000);
+            startMessageDeleteTimeout(userId, interaction);
         }
     }
 
@@ -893,6 +924,9 @@ client.on('interactionCreate', async interaction => {
                 retryBet
             });
 
+            // Clear the message delete timeout since player is retrying
+            clearMessageDeleteTimeout(userId);
+
             if (interaction.user.id !== userId) {
                 console.log('User ID mismatch!', interaction.user.id, '!==', userId);
                 return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
@@ -930,13 +964,13 @@ client.on('interactionCreate', async interaction => {
                     );
 
                 activeGames.set(userId, { type: 'coinflip', bet: retryBet });
-                startGameTimeout(userId, retryBet);
+                startGameTimeout(userId, retryBet, interaction);
                 await interaction.update({ embeds: [embed], components: [row] });
 
             } else if (gameType === 'blackjack') {
                 const game = new BlackjackGame(retryBet, userId);
                 activeGames.set(userId, game);
-                startGameTimeout(userId, retryBet);
+                startGameTimeout(userId, retryBet, interaction);
 
                 const embed = new EmbedBuilder()
                     .setColor(0x0099ff)
@@ -958,7 +992,7 @@ client.on('interactionCreate', async interaction => {
             } else if (gameType === 'higherlower') {
                 const game = new HigherLowerGame(retryBet, userId);
                 activeGames.set(userId, game);
-                startGameTimeout(userId, retryBet);
+                startGameTimeout(userId, retryBet, interaction);
 
                 const embed = new EmbedBuilder()
                     .setColor(0xe74c3c)
@@ -980,7 +1014,7 @@ client.on('interactionCreate', async interaction => {
             } else if (gameType === 'tower') {
                 const game = new TowerGame(retryBet, userId);
                 activeGames.set(userId, game);
-                startGameTimeout(userId, retryBet);
+                startGameTimeout(userId, retryBet, interaction);
 
                 const embed = new EmbedBuilder()
                     .setColor(0x9b59b6)
@@ -1009,7 +1043,7 @@ client.on('interactionCreate', async interaction => {
                 const bombs = parseInt(gameType.split('-')[1]);
                 const game = new MinesGame(retryBet, bombs, userId);
                 activeGames.set(userId, game);
-                startGameTimeout(userId, retryBet);
+                startGameTimeout(userId, retryBet, interaction);
 
                 const embed = new EmbedBuilder()
                     .setColor(0x0099ff)
@@ -1092,11 +1126,11 @@ client.on('interactionCreate', async interaction => {
             );
 
             await interaction.update({ embeds: [embed], components: [retryRow] });
-            setTimeout(async () => {
+            startMessageDeleteTimeout(userId, interaction);
                 try {
-                    await interaction.editReply({ components: [] });
+                    if (!activeGames.has(userId)) await interaction.deleteReply();
                 } catch {}
-            }, 30000);
+            }, 60000);
             return;
         }
 
@@ -1127,11 +1161,11 @@ client.on('interactionCreate', async interaction => {
                 );
 
                 await interaction.update({ embeds: [embed], components: [retryRow] });
-                setTimeout(async () => {
+                startMessageDeleteTimeout(userId, interaction);
                     try {
-                        await interaction.editReply({ components: [] });
+                        if (!activeGames.has(userId)) await interaction.deleteReply();
                     } catch {}
-                }, 30000);
+                }, 60000);
                 return;
             }
 
@@ -1155,11 +1189,11 @@ client.on('interactionCreate', async interaction => {
                 );
 
                 await interaction.update({ embeds: [embed], components: [retryRow] });
-                setTimeout(async () => {
+                startMessageDeleteTimeout(userId, interaction);
                     try {
-                        await interaction.editReply({ components: [] });
+                        if (!activeGames.has(userId)) await interaction.deleteReply();
                     } catch {}
-                }, 30000);
+                }, 60000);
                 return;
             }
 
@@ -1211,11 +1245,11 @@ client.on('interactionCreate', async interaction => {
             );
 
             await interaction.update({ embeds: [embed], components: [retryRow] });
-            setTimeout(async () => {
+            startMessageDeleteTimeout(userId, interaction);
                 try {
-                    await interaction.editReply({ components: [] });
+                    if (!activeGames.has(userId)) await interaction.deleteReply();
                 } catch {}
-            }, 30000);
+            }, 60000);
             return;
         }
 
@@ -1245,11 +1279,11 @@ client.on('interactionCreate', async interaction => {
                 );
 
                 await interaction.update({ embeds: [embed], components: [retryRow] });
-                setTimeout(async () => {
+                startMessageDeleteTimeout(userId, interaction);
                     try {
-                        await interaction.editReply({ components: [] });
+                        if (!activeGames.has(userId)) await interaction.deleteReply();
                     } catch {}
-                }, 30000);
+                }, 60000);
                 return;
             }
 
@@ -1296,11 +1330,11 @@ client.on('interactionCreate', async interaction => {
             );
 
             await interaction.update({ embeds: [embed], components: [retryRow] });
-            setTimeout(async () => {
+            startMessageDeleteTimeout(userId, interaction);
                 try {
-                    await interaction.editReply({ components: [] });
+                    if (!activeGames.has(userId)) await interaction.deleteReply();
                 } catch {}
-            }, 30000);
+            }, 60000);
             return;
         }
 
@@ -1329,11 +1363,11 @@ client.on('interactionCreate', async interaction => {
                 );
 
                 await interaction.update({ embeds: [embed], components: [retryRow] });
-                setTimeout(async () => {
+                startMessageDeleteTimeout(userId, interaction);
                     try {
-                        await interaction.editReply({ components: [] });
+                        if (!activeGames.has(userId)) await interaction.deleteReply();
                     } catch {}
-                }, 30000);
+                }, 60000);
                 return;
             }
 
@@ -1407,11 +1441,11 @@ client.on('interactionCreate', async interaction => {
             );
 
             await interaction.update({ embeds: [embed], components: [retryRow] });
-            setTimeout(async () => {
+            startMessageDeleteTimeout(userId, interaction);
                 try {
-                    await interaction.editReply({ components: [] });
+                    if (!activeGames.has(userId)) await interaction.deleteReply();
                 } catch {}
-            }, 30000);
+            }, 60000);
             return;
         }
     }
@@ -1563,9 +1597,9 @@ client.on('interactionCreate', async interaction => {
                         { name: '🪙 Coinflip', value: '50/50 - **2x payout**', inline: true },
                         { name: '🃏 Blackjack', value: 'Beat dealer - **2x payout**', inline: true },
                         { name: '🔢 Higher/Lower', value: 'Guess next number - **2x payout**', inline: true },
-                        { name: '💣 Mines (3 Bombs)', value: 'Easy - **Max 3x**', inline: true },
-                        { name: '💣 Mines (5 Bombs)', value: 'Medium - **Max 4x**', inline: true },
-                        { name: '💣 Mines (10 Bombs)', value: 'Hard - **Max 5x**', inline: true },
+                        { name: '💣 Mines (5 Bombs)', value: 'Medium - **Max 3x**', inline: true },
+                        { name: '💣 Mines (8 Bombs)', value: 'Hard - **Max 4x**', inline: true },
+                        { name: '💣 Mines (14 Bombs)', value: 'Expert - **Max 5x**', inline: true },
                         { name: '🗼 Tower', value: 'Climb 10 levels - **Max 10x**', inline: true }
                     );
 
@@ -1577,9 +1611,9 @@ client.on('interactionCreate', async interaction => {
                             { label: 'Coinflip', value: 'coinflip', description: '50/50 - 2x', emoji: '🪙' },
                             { label: 'Blackjack', value: 'blackjack', description: 'Beat the dealer - 2x', emoji: '🃏' },
                             { label: 'Higher/Lower', value: 'higherlower', description: 'Guess next number - 2x', emoji: '🔢' },
-                            { label: 'Mines (3 Bombs)', value: 'mines-3', description: 'Easy - Max 5x', emoji: '💣' },
-                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Medium - Max 7x', emoji: '💣' },
-                            { label: 'Mines (10 Bombs)', value: 'mines-10', description: 'Hard - Max 10x', emoji: '💣' },
+                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Medium - Max 3x', emoji: '💣' },
+                            { label: 'Mines (8 Bombs)', value: 'mines-8', description: 'Hard - Max 4x', emoji: '💣' },
+                            { label: 'Mines (14 Bombs)', value: 'mines-14', description: 'Expert - Max 5x', emoji: '💣' },
                             { label: 'Tower', value: 'tower', description: 'Climb to top - Max 10x', emoji: '🗼' }
                         ])
                 );
