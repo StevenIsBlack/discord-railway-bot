@@ -802,30 +802,34 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.isButton()) {
-        const parts = interaction.customId.split('_');
-        const action = parts[0];
-        
-        // Extract userId based on button type
-        let userId;
-        if (action === 'retry') {
-            // retry_gametype_userId_bet
-            userId = parts[2];
-        } else if (action === 'cashout-confirm' || action === 'cashout-decline') {
-            // cashout-confirm_userId or cashout-decline_userId
-            userId = parts[1];
-        } else {
-            // Most other buttons: action_userId or action_param_userId
-            userId = parts[parts.length - 1];
-        }
+        try {
+            // ALWAYS defer update first to prevent buttons from disappearing
+            await interaction.deferUpdate().catch(() => {});
+            
+            const parts = interaction.customId.split('_');
+            const action = parts[0];
+            
+            // Extract userId based on button type
+            let userId;
+            if (action === 'retry') {
+                // retry_gametype_userId_bet
+                userId = parts[2];
+            } else if (action === 'cashout-confirm' || action === 'cashout-decline') {
+                // cashout-confirm_userId or cashout-decline_userId
+                userId = parts[1];
+            } else {
+                // Most other buttons: action_userId or action_param_userId
+                userId = parts[parts.length - 1];
+            }
         
         if (action === 'cashout-confirm') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return interaction.reply({ content: '❌ Admin only!', ephemeral: true });
+                return interaction.followUp({ content: '❌ Admin only!', ephemeral: true });
             }
 
             const cashoutData = pendingCashouts.get(userId);
             if (!cashoutData) {
-                return interaction.reply({ content: '❌ Cashout request not found!', ephemeral: true });
+                return interaction.followUp({ content: '❌ Cashout request not found!', ephemeral: true });
             }
 
             setBalance(userId, 0);
@@ -837,7 +841,7 @@ client.on('interactionCreate', async interaction => {
                 .setDescription(`**User:** <@${userId}>\n**Minecraft Username:** ${cashoutData.mcUsername}\n**Amount:** ${formatAmount(cashoutData.amount)}\n\n**Status:** Paid & Balance Reset`)
                 .setTimestamp();
 
-            await interaction.update({ embeds: [embed], components: [] });
+            await interaction.editReply({ embeds: [embed], components: [] });
 
             try {
                 const user = await client.users.fetch(userId);
@@ -849,12 +853,12 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'cashout-decline') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return interaction.reply({ content: '❌ Admin only!', ephemeral: true });
+                return interaction.followUp({ content: '❌ Admin only!', ephemeral: true });
             }
 
             const cashoutData = pendingCashouts.get(userId);
             if (!cashoutData) {
-                return interaction.reply({ content: '❌ Cashout request not found!', ephemeral: true });
+                return interaction.followUp({ content: '❌ Cashout request not found!', ephemeral: true });
             }
 
             pendingCashouts.delete(userId);
@@ -865,7 +869,7 @@ client.on('interactionCreate', async interaction => {
                 .setDescription(`**User:** <@${userId}>\n**Minecraft Username:** ${cashoutData.mcUsername}\n**Amount:** ${formatAmount(cashoutData.amount)}\n\n**Status:** Declined - Balance Kept`)
                 .setTimestamp();
 
-            await interaction.update({ embeds: [embed], components: [] });
+            await interaction.editReply({ embeds: [embed], components: [] });
 
             try {
                 const user = await client.users.fetch(userId);
@@ -891,16 +895,16 @@ client.on('interactionCreate', async interaction => {
 
             if (interaction.user.id !== userId) {
                 console.log('User ID mismatch!', interaction.user.id, '!==', userId);
-                return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
+                return interaction.followUp({ content: '❌ Not your game!', ephemeral: true });
             }
 
             if (activeGames.has(userId)) {
-                return interaction.reply({ content: '❌ Finish your current game first!', ephemeral: true });
+                return interaction.followUp({ content: '❌ Finish your current game first!', ephemeral: true });
             }
 
             const balance = getBalance(userId);
             if (balance < retryBet) {
-                return interaction.reply({ content: `❌ Insufficient balance! You have **${formatAmount(balance)}**`, ephemeral: true });
+                return interaction.followUp({ content: `❌ Insufficient balance! You have **${formatAmount(balance)}**`, ephemeral: true });
             }
 
             setBalance(userId, balance - retryBet);
@@ -927,7 +931,7 @@ client.on('interactionCreate', async interaction => {
 
                 activeGames.set(userId, { type: 'coinflip', bet: retryBet });
                 startGameTimeout(userId, retryBet);
-                await interaction.update({ embeds: [embed], components: [row] });
+                await interaction.editReply({ embeds: [embed], components: [row] });
 
             } else if (gameType === 'blackjack') {
                 const game = new BlackjackGame(retryBet, userId);
@@ -949,7 +953,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`stand_${userId}`).setLabel('Stand').setStyle(ButtonStyle.Success).setEmoji('✋')
                 );
 
-                await interaction.update({ embeds: [embed], components: [row] });
+                await interaction.editReply({ embeds: [embed], components: [row] });
 
             } else if (gameType === 'higherlower') {
                 const game = new HigherLowerGame(retryBet, userId);
@@ -971,7 +975,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`lower_${userId}`).setLabel('📉 Lower').setStyle(ButtonStyle.Danger)
                 );
 
-                await interaction.update({ embeds: [embed], components: [row] });
+                await interaction.editReply({ embeds: [embed], components: [row] });
 
             } else if (gameType === 'tower') {
                 const game = new TowerGame(retryBet, userId);
@@ -999,7 +1003,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`towercash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
                 );
 
-                await interaction.update({ embeds: [embed], components: [row, cashoutRow] });
+                await interaction.editReply({ embeds: [embed], components: [row, cashoutRow] });
 
             } else if (gameType.startsWith('mines-')) {
                 const bombs = parseInt(gameType.split('-')[1]);
@@ -1040,13 +1044,13 @@ client.on('interactionCreate', async interaction => {
                     .setStyle(ButtonStyle.Success)
                     .setDisabled(true);
 
-                await interaction.update({ embeds: [embed], components: rows });
+                await interaction.editReply({ embeds: [embed], components: rows });
             }
             return;
         }
 
         if (interaction.user.id !== userId) {
-            return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
+            return interaction.followUp({ content: '❌ Not your game!', ephemeral: true });
         }
 
         const game = activeGames.get(userId);
@@ -1085,7 +1089,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`retry_higherlower_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
             );
 
-            await interaction.update({ embeds: [embed], components: [retryRow] });
+            await interaction.editReply({ embeds: [embed], components: [retryRow] });
             setTimeout(async () => {
                 try {
                     await interaction.editReply({ components: [] });
@@ -1124,7 +1128,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`retry_tower_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
                 );
 
-                await interaction.update({ embeds: [embed], components: [retryRow] });
+                await interaction.editReply({ embeds: [embed], components: [retryRow] });
                 setTimeout(async () => {
                     try {
                         await interaction.editReply({ components: [] });
@@ -1152,7 +1156,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`retry_tower_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
                 );
 
-                await interaction.update({ embeds: [embed], components: [retryRow] });
+                await interaction.editReply({ embeds: [embed], components: [retryRow] });
                 setTimeout(async () => {
                     try {
                         await interaction.editReply({ components: [] });
@@ -1182,7 +1186,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`towercash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success)
             );
 
-            await interaction.update({ embeds: [embed], components: [row, cashoutRow] });
+            await interaction.editReply({ embeds: [embed], components: [row, cashoutRow] });
             return;
         }
 
@@ -1216,7 +1220,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`retry_tower_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
             );
 
-            await interaction.update({ embeds: [embed], components: [retryRow] });
+            await interaction.editReply({ embeds: [embed], components: [retryRow] });
             setTimeout(async () => {
                 try {
                     await interaction.editReply({ components: [] });
@@ -1254,7 +1258,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`retry_blackjack_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
                 );
 
-                await interaction.update({ embeds: [embed], components: [retryRow] });
+                await interaction.editReply({ embeds: [embed], components: [retryRow] });
                 setTimeout(async () => {
                     try {
                         await interaction.editReply({ components: [] });
@@ -1277,7 +1281,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`stand_${userId}`).setLabel('Stand').setStyle(ButtonStyle.Success).setEmoji('✋')
             );
 
-            return interaction.update({ embeds: [embed], components: [row] });
+            return interaction.editReply({ embeds: [embed], components: [row] });
         }
 
         if (action === 'stand') {
@@ -1313,7 +1317,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`retry_blackjack_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
             );
 
-            await interaction.update({ embeds: [embed], components: [retryRow] });
+            await interaction.editReply({ embeds: [embed], components: [retryRow] });
             setTimeout(async () => {
                 try {
                     await interaction.editReply({ components: [] });
@@ -1352,7 +1356,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`retry_mines-${game.bombCount}_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
                 );
 
-                await interaction.update({ embeds: [embed], components: [retryRow] });
+                await interaction.editReply({ embeds: [embed], components: [retryRow] });
                 setTimeout(async () => {
                     try {
                         await interaction.editReply({ components: [] });
@@ -1393,7 +1397,7 @@ client.on('interactionCreate', async interaction => {
                 .setLabel('💰')
                 .setStyle(ButtonStyle.Success);
 
-            return interaction.update({ embeds: [embed], components: rows });
+            return interaction.editReply({ embeds: [embed], components: rows });
         }
 
         if (action === 'minecash') {
@@ -1426,7 +1430,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`retry_mines-${game.bombCount}_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
             );
 
-            await interaction.update({ embeds: [embed], components: [retryRow] });
+            await interaction.editReply({ embeds: [embed], components: [retryRow] });
             setTimeout(async () => {
                 try {
                     await interaction.editReply({ components: [] });
@@ -1434,7 +1438,13 @@ client.on('interactionCreate', async interaction => {
             }, 30000);
             return;
         }
+    } catch (error) {
+        console.error('Button interaction error:', error);
+        try {
+            await interaction.followUp({ content: '❌ An error occurred. Please try again.', ephemeral: true });
+        } catch {}
     }
+}
 
     try {
         switch (interaction.commandName) {
