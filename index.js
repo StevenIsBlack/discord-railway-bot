@@ -302,17 +302,17 @@ class MinesGame {
     }
 
     createBoard() {
-        const board = Array(25).fill(false);
+        const board = Array(24).fill(false);
         const bombPositions = new Set();
         while (bombPositions.size < this.bombCount) {
-            bombPositions.add(Math.floor(Math.random() * 25));
+            bombPositions.add(Math.floor(Math.random() * 24));
         }
         bombPositions.forEach(pos => board[pos] = true);
         return board;
     }
 
     reveal(position) {
-        if (this.revealed.has(position) || this.gameOver || this.locked || position < 0 || position > 24) {
+        if (this.revealed.has(position) || this.gameOver || this.locked || position < 0 || position > 23) {
             return { valid: false };
         }
 
@@ -339,8 +339,9 @@ class MinesGame {
 
     getBoardString() {
         let str = '';
-        for (let i = 0; i < 25; i++) {
-            if (i % 5 === 0 && i !== 0) str += '\n';
+        // Show 4 rows of 5, then 1 row of 4
+        for (let i = 0; i < 24; i++) {
+            if (i === 5 || i === 10 || i === 15 || i === 20) str += '\n';
             if (this.revealed.has(i)) {
                 str += this.board[i] ? '💣' : '💎';
             } else if (this.gameOver) {
@@ -624,7 +625,8 @@ client.on('interactionCreate', async interaction => {
                 .setFooter({ text: 'Click tiles to reveal diamonds • Avoid the bombs!' });
 
             const rows = [];
-            for (let r = 0; r < 5; r++) {
+            // First 4 rows: 5 buttons each (tiles 0-19)
+            for (let r = 0; r < 4; r++) {
                 const row = new ActionRowBuilder();
                 for (let c = 0; c < 5; c++) {
                     const pos = r * 5 + c;
@@ -637,11 +639,23 @@ client.on('interactionCreate', async interaction => {
                 }
                 rows.push(row);
             }
-
-            const cashoutRow = new ActionRowBuilder().addComponents(
+            
+            // Last row: 4 tiles (20-23) + cashout button
+            const lastRow = new ActionRowBuilder();
+            for (let c = 0; c < 4; c++) {
+                const pos = 20 + c;
+                lastRow.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`mine_${pos}_${userId}`)
+                        .setLabel('?')
+                        .setStyle(ButtonStyle.Secondary)
+                );
+            }
+            lastRow.addComponents(
                 new ButtonBuilder().setCustomId(`minecash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
             );
-            rows.push(cashoutRow);
+            rows.push(lastRow);
+            
             console.log('About to send mines reply with', rows.length, 'rows');
 
             await interaction.editReply({ embeds: [embed], components: rows });
@@ -1174,7 +1188,8 @@ client.on('interactionCreate', async interaction => {
                 .setFooter({ text: 'Keep finding diamonds or cashout!' });
 
             const rows = [];
-            for (let r = 0; r < 5; r++) {
+            // First 4 rows: 5 buttons each (tiles 0-19)
+            for (let r = 0; r < 4; r++) {
                 const row = new ActionRowBuilder();
                 for (let c = 0; c < 5; c++) {
                     const pos = r * 5 + c;
@@ -1188,11 +1203,23 @@ client.on('interactionCreate', async interaction => {
                 }
                 rows.push(row);
             }
-
-            const cashoutRow = new ActionRowBuilder().addComponents(
+            
+            // Last row: 4 tiles (20-23) + cashout
+            const lastRow = new ActionRowBuilder();
+            for (let c = 0; c < 4; c++) {
+                const pos = 20 + c;
+                lastRow.addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(`mine_${pos}_${userId}`)
+                        .setLabel(game.revealed.has(pos) ? '💎' : '?')
+                        .setStyle(game.revealed.has(pos) ? ButtonStyle.Success : ButtonStyle.Secondary)
+                        .setDisabled(game.revealed.has(pos))
+                );
+            }
+            lastRow.addComponents(
                 new ButtonBuilder().setCustomId(`minecash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success)
             );
-            rows.push(cashoutRow);
+            rows.push(lastRow);
 
             return interaction.update({ embeds: [embed], components: rows });
         }
