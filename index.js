@@ -302,9 +302,20 @@ class MinesGame {
         this.multiplier = 1.0;
         this.locked = false;
         
-        if (bombCount === 3) this.multiplierIncrement = 0.05;
-        else if (bombCount === 5) this.multiplierIncrement = 0.0625;
-        else if (bombCount === 10) this.multiplierIncrement = 0.133;
+        // Calculate increments based on max multipliers
+        // 3 bombs: 21 safe tiles, max 5x
+        // 5 bombs: 19 safe tiles, max 7x
+        // 10 bombs: 14 safe tiles, max 10x
+        if (bombCount === 3) {
+            this.multiplierIncrement = 4.0 / 21; // (5-1) / 21 safe tiles
+            this.maxMultiplier = 5.0;
+        } else if (bombCount === 5) {
+            this.multiplierIncrement = 6.0 / 19; // (7-1) / 19 safe tiles
+            this.maxMultiplier = 7.0;
+        } else if (bombCount === 10) {
+            this.multiplierIncrement = 9.0 / 14; // (10-1) / 14 safe tiles
+            this.maxMultiplier = 10.0;
+        }
     }
 
     createBoard() {
@@ -1552,9 +1563,9 @@ client.on('interactionCreate', async interaction => {
                         { name: '🪙 Coinflip', value: '50/50 - **2x payout**', inline: true },
                         { name: '🃏 Blackjack', value: 'Beat dealer - **2x payout**', inline: true },
                         { name: '🔢 Higher/Lower', value: 'Guess next number - **2x payout**', inline: true },
-                        { name: '💣 Mines (3 Bombs)', value: 'Easy - **Max 2x**', inline: true },
-                        { name: '💣 Mines (5 Bombs)', value: 'Medium - **Max 2.5x**', inline: true },
-                        { name: '💣 Mines (10 Bombs)', value: 'Hard - **Max 3x**', inline: true },
+                        { name: '💣 Mines (3 Bombs)', value: 'Easy - **Max 5x**', inline: true },
+                        { name: '💣 Mines (5 Bombs)', value: 'Medium - **Max 7x**', inline: true },
+                        { name: '💣 Mines (10 Bombs)', value: 'Hard - **Max 10x**', inline: true },
                         { name: '🗼 Tower', value: 'Climb 10 levels - **Max 10x**', inline: true }
                     );
 
@@ -1566,9 +1577,9 @@ client.on('interactionCreate', async interaction => {
                             { label: 'Coinflip', value: 'coinflip', description: '50/50 - 2x', emoji: '🪙' },
                             { label: 'Blackjack', value: 'blackjack', description: 'Beat the dealer - 2x', emoji: '🃏' },
                             { label: 'Higher/Lower', value: 'higherlower', description: 'Guess next number - 2x', emoji: '🔢' },
-                            { label: 'Mines (3 Bombs)', value: 'mines-3', description: 'Easy - Max 2x', emoji: '💣' },
-                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Medium - Max 2.5x', emoji: '💣' },
-                            { label: 'Mines (10 Bombs)', value: 'mines-10', description: 'Hard - Max 3x', emoji: '💣' },
+                            { label: 'Mines (3 Bombs)', value: 'mines-3', description: 'Easy - Max 5x', emoji: '💣' },
+                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Medium - Max 7x', emoji: '💣' },
+                            { label: 'Mines (10 Bombs)', value: 'mines-10', description: 'Hard - Max 10x', emoji: '💣' },
                             { label: 'Tower', value: 'tower', description: 'Climb to top - Max 10x', emoji: '🗼' }
                         ])
                 );
