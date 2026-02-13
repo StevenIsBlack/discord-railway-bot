@@ -1052,12 +1052,18 @@ client.on('interactionCreate', async interaction => {
         const game = activeGames.get(userId);
 
         if (action === 'higher' || action === 'lower') {
-            if (!game) return interaction.reply({ content: '❌ Game not found!', ephemeral: true });
+            if (!game) {
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+            }
 
             clearGameTimeout(userId);
 
             const result = game.guess(action);
-            if (!result) return interaction.reply({ content: '❌ Action in progress!', ephemeral: true });
+            if (!result) {
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Action in progress!', ephemeral: true });
+            }
 
             activeGames.delete(userId);
             if (result.won) {
@@ -1089,13 +1095,17 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (action === 'tower') {
-            if (!game) return interaction.reply({ content: '❌ Game not found!', ephemeral: true });
+            if (!game) {
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+            }
 
             const tileNum = parseInt(parts[1]);
             const result = game.chooseTile(tileNum);
 
             if (!result.valid) {
-                return interaction.reply({ content: '❌ Invalid move!', ephemeral: true });
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Invalid move!', ephemeral: true });
             }
 
             if (!result.success) {
@@ -1177,8 +1187,16 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (action === 'towercash') {
+            if (!game) {
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+            }
+            
             const payout = game.cashout();
-            if (payout === 0) return interaction.reply({ content: '❌ Cannot cashout at level 0!', ephemeral: true });
+            if (payout === 0) {
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Cannot cashout at level 0!', ephemeral: true });
+            }
 
             clearGameTimeout(userId);
             activeGames.delete(userId);
@@ -1207,13 +1225,17 @@ client.on('interactionCreate', async interaction => {
             return;
         }
 
-        if (!game && action !== 'minecash') {
-            return interaction.reply({ content: '❌ Game not found!', ephemeral: true });
-        }
-
         if (action === 'hit') {
+            if (!game) {
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+            }
+            
             const result = game.hit();
-            if (!result) return interaction.reply({ content: '❌ Action already in progress!', ephemeral: true });
+            if (!result) {
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Action already in progress!', ephemeral: true });
+            }
 
             if (result.busted) {
                 clearGameTimeout(userId);
@@ -1259,8 +1281,16 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (action === 'stand') {
+            if (!game) {
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+            }
+            
             const result = game.stand();
-            if (!result) return interaction.reply({ content: '❌ Action already in progress!', ephemeral: true });
+            if (!result) {
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Action already in progress!', ephemeral: true });
+            }
 
             clearGameTimeout(userId);
             activeGames.delete(userId);
@@ -1293,11 +1323,17 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (action === 'mine') {
+            if (!game) {
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+            }
+            
             const position = parseInt(parts[1]);
             const result = game.reveal(position);
 
             if (!result.valid) {
-                return interaction.reply({ content: '❌ Invalid move!', ephemeral: true });
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Invalid move!', ephemeral: true });
             }
 
             if (result.bomb) {
@@ -1361,8 +1397,16 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (action === 'minecash') {
+            if (!game) {
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+            }
+            
             const payout = game.cashout();
-            if (payout === 0) return interaction.reply({ content: '❌ Cashout failed!', ephemeral: true });
+            if (payout === 0) {
+                await interaction.deferUpdate();
+                return interaction.followUp({ content: '❌ Cashout failed!', ephemeral: true });
+            }
 
             clearGameTimeout(userId);
             activeGames.delete(userId);
@@ -1852,4 +1896,4 @@ client.on('messageCreate', async (message) => {
 });
 
 client.on('error', console.error);
-client.login(DISCORD_TOKEN); 
+client.login(DISCORD_TOKEN);
