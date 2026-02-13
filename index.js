@@ -157,10 +157,8 @@ function startGameTimeout(userId, bet) {
     
     const timeout = setTimeout(() => {
         if (activeGames.has(userId)) {
-            const game = activeGames.get(userId);
             activeGames.delete(userId);
             gameTimeouts.delete(userId);
-            
             setBalance(userId, getBalance(userId) + bet);
             console.log(`Game timeout for user ${userId} - refunded ${formatAmount(bet)}`);
         }
@@ -177,7 +175,7 @@ function clearGameTimeout(userId) {
 }
 
 function playCoinflip(choice, bet) {
-    const result = Math.random() < 0.4 ? 'heads' : 'tails';
+    const result = Math.random() < 0.5 ? 'heads' : 'tails';
     const won = result === choice;
     return { result, won, payout: won ? bet * 2 : 0 };
 }
@@ -281,6 +279,10 @@ class BlackjackGame {
     handToString(hand) {
         return hand.map(c => `${c.value}${c.suit}`).join(' ');
     }
+    
+    getDealerVisibleHand() {
+        return `${this.dealerHand[0].value}${this.dealerHand[0].suit} [Hidden]`;
+    }
 }
 
 class MinesGame {
@@ -356,8 +358,7 @@ class HigherLowerGame {
     constructor(bet, userId) {
         this.bet = bet;
         this.userId = userId;
-        // Sets the starting number exactly to 5
-        this.currentNumber = 5; 
+        this.currentNumber = Math.floor(Math.random() * 100) + 1;
         this.gameOver = false;
         this.locked = false;
     }
@@ -366,12 +367,16 @@ class HigherLowerGame {
         if (this.gameOver || this.locked) return null;
         this.locked = true;
         
-        // Generates a random number between 1 and 10
-        const nextNumber = Math.floor(Math.random() * 10) + 1;
-        
+        const nextNumber = Math.floor(Math.random() * 100) + 1;
         const isHigher = nextNumber > this.currentNumber;
-        // Note: If nextNumber equals currentNumber, 'lower' wins by default in your logic
-        const won = (choice === 'higher' && isHigher) || (choice === 'lower' && !isHigher);
+        const isEqual = nextNumber === this.currentNumber;
+        
+        let won;
+        if (isEqual) {
+            won = false;
+        } else {
+            won = (choice === 'higher' && isHigher) || (choice === 'lower' && !isHigher);
+        }
         
         this.gameOver = true;
         return {
@@ -517,7 +522,9 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand() && !interaction.isStringSelectMenu() && !interaction.isButton() && !interaction.isModalSubmit()) return;
 
     if (interaction.isModalSubmit()) {
-        const [gameType, userId] = interaction.customId.split('_');
+        const parts = interaction.customId.split('_');
+        const gameType = parts[0];
+        const userId = parts[1];
         
         if (interaction.user.id !== userId) {
             return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
@@ -573,9 +580,10 @@ client.on('interactionCreate', async interaction => {
                 .setTitle('🃏 Blackjack')
                 .addFields(
                     { name: 'Your Hand', value: `${game.handToString(game.playerHand)} (${game.calculateValue(game.playerHand)})`, inline: true },
-                    { name: 'Dealer Hand', value: `${game.handToString(game.dealerHand)} (${game.calculateValue(game.dealerHand)})`, inline: true },
+                    { name: 'Dealer Hand', value: game.getDealerVisibleHand(), inline: true },
                     { name: 'Bet', value: formatAmount(bet), inline: false }
-                );
+                )
+                .setFooter({ text: 'Hit to draw another card • Stand to end your turn' });
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`hit_${userId}`).setLabel('Hit').setStyle(ButtonStyle.Primary).setEmoji('🎴'),
@@ -598,7 +606,8 @@ client.on('interactionCreate', async interaction => {
                     { name: 'Bet', value: formatAmount(bet), inline: true },
                     { name: 'Bombs', value: `${bombs}`, inline: true },
                     { name: 'Multiplier', value: `${game.multiplier.toFixed(2)}x`, inline: true }
-                );
+                )
+                .setFooter({ text: 'Click tiles to reveal diamonds • Avoid the bombs!' });
 
             const rows = [];
             for (let r = 0; r < 5; r++) {
@@ -607,7 +616,7 @@ client.on('interactionCreate', async interaction => {
                     const pos = r * 5 + c;
                     row.addComponents(
                         new ButtonBuilder()
-                            .setCustomId(`mine-${pos}_${userId}`)
+                            .setCustomId(`mine_${pos}_${userId}`)
                             .setLabel('?')
                             .setStyle(ButtonStyle.Secondary)
                     );
@@ -616,7 +625,7 @@ client.on('interactionCreate', async interaction => {
             }
 
             const cashoutRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`mine-cashout_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
+                new ButtonBuilder().setCustomId(`minecash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
             );
             rows.push(cashoutRow);
 
@@ -634,7 +643,8 @@ client.on('interactionCreate', async interaction => {
                 .addFields(
                     { name: 'Bet', value: formatAmount(bet), inline: true },
                     { name: 'Potential Win', value: formatAmount(bet * 2), inline: true }
-                );
+                )
+                .setFooter({ text: 'Will the next number be higher or lower?' });
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`higher_${userId}`).setLabel('📈 Higher').setStyle(ButtonStyle.Success),
@@ -660,13 +670,13 @@ client.on('interactionCreate', async interaction => {
                 .setFooter({ text: 'Choose the safe tile! One wrong move = game over' });
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`tower-0_${userId}`).setLabel('Tile 1').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId(`tower-1_${userId}`).setLabel('Tile 2').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId(`tower-2_${userId}`).setLabel('Tile 3').setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder().setCustomId(`tower_0_${userId}`).setLabel('Tile 1').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId(`tower_1_${userId}`).setLabel('Tile 2').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId(`tower_2_${userId}`).setLabel('Tile 3').setStyle(ButtonStyle.Secondary)
             );
 
             const cashoutRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`tower-cashout_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
+                new ButtonBuilder().setCustomId(`towercash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
             );
 
             await interaction.reply({ embeds: [embed], components: [row, cashoutRow] });
@@ -723,18 +733,24 @@ client.on('interactionCreate', async interaction => {
                     { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
                 );
 
+            const retryRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`retry_coinflip_${userId}_${betAmount}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
+            );
+
             activeGames.delete(userId);
-            await interaction.update({ embeds: [embed], components: [] });
+            await interaction.update({ embeds: [embed], components: [retryRow] });
             setTimeout(async () => {
                 try {
-                    await interaction.deleteReply();
+                    await interaction.editReply({ components: [] });
                 } catch {}
-            }, 10000);
+            }, 60000);
         }
     }
 
     if (interaction.isButton()) {
-        const [action, userId] = interaction.customId.split('_');
+        const parts = interaction.customId.split('_');
+        const action = parts[0];
+        const userId = parts[parts.length - 1];
         
         if (action === 'cashout-confirm') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
@@ -762,6 +778,80 @@ client.on('interactionCreate', async interaction => {
                 await user.send(`✅ Your cashout of **${formatAmount(cashoutData.amount)}** has been completed! Your balance has been reset.`);
             } catch {}
 
+            return;
+        }
+
+        if (action === 'cashout-decline') {
+            if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
+                return interaction.reply({ content: '❌ Admin only!', ephemeral: true });
+            }
+
+            const cashoutData = pendingCashouts.get(userId);
+            if (!cashoutData) {
+                return interaction.reply({ content: '❌ Cashout request not found!', ephemeral: true });
+            }
+
+            pendingCashouts.delete(userId);
+
+            const embed = new EmbedBuilder()
+                .setColor(0xff0000)
+                .setTitle('❌ Cashout Declined')
+                .setDescription(`**User:** <@${userId}>\n**Minecraft Username:** ${cashoutData.mcUsername}\n**Amount:** ${formatAmount(cashoutData.amount)}\n\n**Status:** Declined - Balance Kept`)
+                .setTimestamp();
+
+            await interaction.update({ embeds: [embed], components: [] });
+
+            try {
+                const user = await client.users.fetch(userId);
+                await user.send(`❌ Your cashout request of **${formatAmount(cashoutData.amount)}** has been declined. Your balance remains unchanged.`);
+            } catch {}
+
+            return;
+        }
+
+        if (action === 'retry') {
+            const gameType = parts[1];
+            const retryBet = parseInt(parts[3]);
+
+            if (interaction.user.id !== userId) {
+                return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
+            }
+
+            if (activeGames.has(userId)) {
+                return interaction.reply({ content: '❌ Finish your current game first!', ephemeral: true });
+            }
+
+            const balance = getBalance(userId);
+            if (balance < retryBet) {
+                return interaction.reply({ content: `❌ Insufficient balance! You have **${formatAmount(balance)}**`, ephemeral: true });
+            }
+
+            setBalance(userId, balance - retryBet);
+
+            if (gameType === 'coinflip') {
+                const row = new ActionRowBuilder().addComponents(
+                    new StringSelectMenuBuilder()
+                        .setCustomId(`coinflip-choice_${userId}_${retryBet}`)
+                        .setPlaceholder('Choose Heads or Tails')
+                        .addOptions([
+                            { label: 'Heads', value: 'heads', emoji: '🪙' },
+                            { label: 'Tails', value: 'tails', emoji: '🪙' }
+                        ])
+                );
+
+                const embed = new EmbedBuilder()
+                    .setColor(0xffd700)
+                    .setTitle('🪙 Coinflip')
+                    .setDescription('Choose your side!')
+                    .addFields(
+                        { name: 'Bet', value: formatAmount(retryBet), inline: true },
+                        { name: 'Potential Win', value: formatAmount(retryBet * 2), inline: true }
+                    );
+
+                activeGames.set(userId, { type: 'coinflip', bet: retryBet });
+                startGameTimeout(userId, retryBet);
+                await interaction.update({ embeds: [embed], components: [row] });
+            }
             return;
         }
 
@@ -795,46 +885,23 @@ client.on('interactionCreate', async interaction => {
                     { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: true }
                 );
 
-            await interaction.update({ embeds: [embed], components: [] });
+            const retryRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`retry_higherlower_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
+            );
+
+            await interaction.update({ embeds: [embed], components: [retryRow] });
             setTimeout(async () => {
                 try {
-                    await interaction.deleteReply();
+                    await interaction.editReply({ components: [] });
                 } catch {}
-            }, 10000);
+            }, 60000);
             return;
         }
 
-        if (action.startsWith('tower')) {
+        if (action === 'tower') {
             if (!game) return interaction.reply({ content: '❌ Game not found!', ephemeral: true });
 
-            if (action === 'tower-cashout') {
-                const payout = game.cashout();
-                if (payout === 0) return interaction.reply({ content: '❌ Cannot cashout at level 0!', ephemeral: true });
-
-                clearGameTimeout(userId);
-                activeGames.delete(userId);
-                setBalance(userId, getBalance(userId) + payout);
-
-                const embed = new EmbedBuilder()
-                    .setColor(0x00ff00)
-                    .setTitle('🗼 Tower - Cashed Out!')
-                    .addFields(
-                        { name: 'Level Reached', value: `${game.currentLevel}/${game.maxLevels}`, inline: true },
-                        { name: 'Multiplier', value: `${game.getMultiplier().toFixed(2)}x`, inline: true },
-                        { name: 'Winnings', value: formatAmount(payout), inline: true },
-                        { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
-                    );
-
-                await interaction.update({ embeds: [embed], components: [] });
-                setTimeout(async () => {
-                    try {
-                        await interaction.deleteReply();
-                    } catch {}
-                }, 10000);
-                return;
-            }
-
-            const tileNum = parseInt(action.split('-')[1]);
+            const tileNum = parseInt(parts[1]);
             const result = game.chooseTile(tileNum);
 
             if (!result.valid) {
@@ -853,12 +920,16 @@ client.on('interactionCreate', async interaction => {
                         { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: true }
                     );
 
-                await interaction.update({ embeds: [embed], components: [] });
+                const retryRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`retry_tower_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
+                );
+
+                await interaction.update({ embeds: [embed], components: [retryRow] });
                 setTimeout(async () => {
                     try {
-                        await interaction.deleteReply();
+                        await interaction.editReply({ components: [] });
                     } catch {}
-                }, 10000);
+                }, 60000);
                 return;
             }
 
@@ -877,12 +948,16 @@ client.on('interactionCreate', async interaction => {
                         { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
                     );
 
-                await interaction.update({ embeds: [embed], components: [] });
+                const retryRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`retry_tower_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
+                );
+
+                await interaction.update({ embeds: [embed], components: [retryRow] });
                 setTimeout(async () => {
                     try {
-                        await interaction.deleteReply();
+                        await interaction.editReply({ components: [] });
                     } catch {}
-                }, 10000);
+                }, 60000);
                 return;
             }
 
@@ -898,20 +973,51 @@ client.on('interactionCreate', async interaction => {
                 .setFooter({ text: 'Keep climbing or cashout!' });
 
             const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`tower-0_${userId}`).setLabel('Tile 1').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId(`tower-1_${userId}`).setLabel('Tile 2').setStyle(ButtonStyle.Secondary),
-                new ButtonBuilder().setCustomId(`tower-2_${userId}`).setLabel('Tile 3').setStyle(ButtonStyle.Secondary)
+                new ButtonBuilder().setCustomId(`tower_0_${userId}`).setLabel('Tile 1').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId(`tower_1_${userId}`).setLabel('Tile 2').setStyle(ButtonStyle.Secondary),
+                new ButtonBuilder().setCustomId(`tower_2_${userId}`).setLabel('Tile 3').setStyle(ButtonStyle.Secondary)
             );
 
             const cashoutRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`tower-cashout_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success)
+                new ButtonBuilder().setCustomId(`towercash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success)
             );
 
             await interaction.update({ embeds: [embed], components: [row, cashoutRow] });
             return;
         }
 
-        if (!game && action !== 'mine-cashout') {
+        if (action === 'towercash') {
+            const payout = game.cashout();
+            if (payout === 0) return interaction.reply({ content: '❌ Cannot cashout at level 0!', ephemeral: true });
+
+            clearGameTimeout(userId);
+            activeGames.delete(userId);
+            setBalance(userId, getBalance(userId) + payout);
+
+            const embed = new EmbedBuilder()
+                .setColor(0x00ff00)
+                .setTitle('🗼 Tower - Cashed Out!')
+                .addFields(
+                    { name: 'Level Reached', value: `${game.currentLevel}/${game.maxLevels}`, inline: true },
+                    { name: 'Multiplier', value: `${game.getMultiplier().toFixed(2)}x`, inline: true },
+                    { name: 'Winnings', value: formatAmount(payout), inline: true },
+                    { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
+                );
+
+            const retryRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`retry_tower_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
+            );
+
+            await interaction.update({ embeds: [embed], components: [retryRow] });
+            setTimeout(async () => {
+                try {
+                    await interaction.editReply({ components: [] });
+                } catch {}
+            }, 60000);
+            return;
+        }
+
+        if (!game && action !== 'minecash') {
             return interaction.reply({ content: '❌ Game not found!', ephemeral: true });
         }
 
@@ -931,12 +1037,17 @@ client.on('interactionCreate', async interaction => {
                         { name: 'Result', value: `Lost **${formatAmount(game.bet)}**`, inline: false },
                         { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
                     );
-                await interaction.update({ embeds: [embed], components: [] });
+
+                const retryRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`retry_blackjack_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
+                );
+
+                await interaction.update({ embeds: [embed], components: [retryRow] });
                 setTimeout(async () => {
                     try {
-                        await interaction.deleteReply();
+                        await interaction.editReply({ components: [] });
                     } catch {}
-                }, 10000);
+                }, 60000);
                 return;
             }
 
@@ -945,8 +1056,9 @@ client.on('interactionCreate', async interaction => {
                 .setTitle('🃏 Blackjack')
                 .addFields(
                     { name: 'Your Hand', value: `${game.handToString(game.playerHand)} (${game.calculateValue(game.playerHand)})`, inline: true },
-                    { name: 'Dealer Hand', value: `${game.handToString(game.dealerHand)} (${game.calculateValue(game.dealerHand)})`, inline: true }
-                );
+                    { name: 'Dealer Hand', value: game.getDealerVisibleHand(), inline: true }
+                )
+                .setFooter({ text: 'Hit to draw another card • Stand to end your turn' });
 
             const row = new ActionRowBuilder().addComponents(
                 new ButtonBuilder().setCustomId(`hit_${userId}`).setLabel('Hit').setStyle(ButtonStyle.Primary).setEmoji('🎴'),
@@ -977,17 +1089,21 @@ client.on('interactionCreate', async interaction => {
                     { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
                 );
 
-            await interaction.update({ embeds: [embed], components: [] });
+            const retryRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`retry_blackjack_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
+            );
+
+            await interaction.update({ embeds: [embed], components: [retryRow] });
             setTimeout(async () => {
                 try {
-                    await interaction.deleteReply();
+                    await interaction.editReply({ components: [] });
                 } catch {}
-            }, 10000);
+            }, 60000);
             return;
         }
 
-        if (action.startsWith('mine')) {
-            const position = parseInt(action.split('-')[1]);
+        if (action === 'mine') {
+            const position = parseInt(parts[1]);
             const result = game.reveal(position);
 
             if (!result.valid) {
@@ -1005,12 +1121,17 @@ client.on('interactionCreate', async interaction => {
                         { name: 'Result', value: `Hit a bomb! Lost **${formatAmount(game.bet)}**`, inline: false },
                         { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
                     );
-                await interaction.update({ embeds: [embed], components: [] });
+
+                const retryRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`retry_mines-${game.bombCount}_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
+                );
+
+                await interaction.update({ embeds: [embed], components: [retryRow] });
                 setTimeout(async () => {
                     try {
-                        await interaction.deleteReply();
+                        await interaction.editReply({ components: [] });
                     } catch {}
-                }, 10000);
+                }, 60000);
                 return;
             }
 
@@ -1021,7 +1142,8 @@ client.on('interactionCreate', async interaction => {
                 .addFields(
                     { name: 'Multiplier', value: `${game.multiplier.toFixed(2)}x`, inline: true },
                     { name: 'Potential Win', value: formatAmount(Math.floor(game.bet * game.multiplier)), inline: true }
-                );
+                )
+                .setFooter({ text: 'Keep finding diamonds or cashout!' });
 
             const rows = [];
             for (let r = 0; r < 5; r++) {
@@ -1030,7 +1152,7 @@ client.on('interactionCreate', async interaction => {
                     const pos = r * 5 + c;
                     row.addComponents(
                         new ButtonBuilder()
-                            .setCustomId(`mine-${pos}_${userId}`)
+                            .setCustomId(`mine_${pos}_${userId}`)
                             .setLabel(game.revealed.has(pos) ? '💎' : '?')
                             .setStyle(game.revealed.has(pos) ? ButtonStyle.Success : ButtonStyle.Secondary)
                             .setDisabled(game.revealed.has(pos))
@@ -1040,14 +1162,14 @@ client.on('interactionCreate', async interaction => {
             }
 
             const cashoutRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`mine-cashout_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success)
+                new ButtonBuilder().setCustomId(`minecash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success)
             );
             rows.push(cashoutRow);
 
             return interaction.update({ embeds: [embed], components: rows });
         }
 
-        if (action === 'mine-cashout') {
+        if (action === 'minecash') {
             const payout = game.cashout();
             if (payout === 0) return interaction.reply({ content: '❌ Cashout failed!', ephemeral: true });
 
@@ -1065,12 +1187,16 @@ client.on('interactionCreate', async interaction => {
                     { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
                 );
 
-            await interaction.update({ embeds: [embed], components: [] });
+            const retryRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`retry_mines-${game.bombCount}_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
+            );
+
+            await interaction.update({ embeds: [embed], components: [retryRow] });
             setTimeout(async () => {
                 try {
-                    await interaction.deleteReply();
+                    await interaction.editReply({ components: [] });
                 } catch {}
-            }, 10000);
+            }, 60000);
             return;
         }
     }
@@ -1183,7 +1309,11 @@ client.on('interactionCreate', async interaction => {
                             new ButtonBuilder()
                                 .setCustomId(`cashout-confirm_${interaction.user.id}`)
                                 .setLabel('✅ Confirm Cashout')
-                                .setStyle(ButtonStyle.Success)
+                                .setStyle(ButtonStyle.Success),
+                            new ButtonBuilder()
+                                .setCustomId(`cashout-decline_${interaction.user.id}`)
+                                .setLabel('❌ Decline')
+                                .setStyle(ButtonStyle.Danger)
                         );
 
                         await cashoutChannel.send({ embeds: [embed], components: [row] });
@@ -1218,6 +1348,9 @@ client.on('interactionCreate', async interaction => {
                         { name: '🪙 Coinflip', value: '50/50 - **2x payout**', inline: true },
                         { name: '🃏 Blackjack', value: 'Beat dealer - **2x payout**', inline: true },
                         { name: '🔢 Higher/Lower', value: 'Guess next number - **2x payout**', inline: true },
+                        { name: '💣 Mines (3 Bombs)', value: 'Easy - **Max 2x**', inline: true },
+                        { name: '💣 Mines (5 Bombs)', value: 'Medium - **Max 2.5x**', inline: true },
+                        { name: '💣 Mines (10 Bombs)', value: 'Hard - **Max 3x**', inline: true },
                         { name: '🗼 Tower', value: 'Climb 10 levels - **Max 10x**', inline: true }
                     );
 
@@ -1229,6 +1362,9 @@ client.on('interactionCreate', async interaction => {
                             { label: 'Coinflip', value: 'coinflip', description: '50/50 - 2x', emoji: '🪙' },
                             { label: 'Blackjack', value: 'blackjack', description: 'Beat the dealer - 2x', emoji: '🃏' },
                             { label: 'Higher/Lower', value: 'higherlower', description: 'Guess next number - 2x', emoji: '🔢' },
+                            { label: 'Mines (3 Bombs)', value: 'mines-3', description: 'Easy - Max 2x', emoji: '💣' },
+                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Medium - Max 2.5x', emoji: '💣' },
+                            { label: 'Mines (10 Bombs)', value: 'mines-10', description: 'Hard - Max 3x', emoji: '💣' },
                             { label: 'Tower', value: 'tower', description: 'Climb to top - Max 10x', emoji: '🗼' }
                         ])
                 );
