@@ -28,7 +28,6 @@ const userSpamWarnings = new Map();
 const userBalances = new Map();
 const activeGames = new Map();
 const gameTimeouts = new Map();
-const messageDeleteTimeouts = new Map();
 const pendingCashouts = new Map();
 const MEMBER_ROLE_ID = '1442921893786161387';
 const MIN_BET = 500000;
@@ -172,32 +171,6 @@ function clearGameTimeout(userId) {
     if (gameTimeouts.has(userId)) {
         clearTimeout(gameTimeouts.get(userId));
         gameTimeouts.delete(userId);
-    }
-}
-
-function startMessageDeleteTimeout(userId, interaction) {
-    // Clear any existing timeout
-    if (messageDeleteTimeouts.has(userId)) {
-        clearTimeout(messageDeleteTimeouts.get(userId));
-    }
-    
-    // Delete full message after 60 seconds
-    const timeout = startMessageDeleteTimeout(userId, interaction);
-        try {
-            await interaction.deleteReply();
-            messageDeleteTimeouts.delete(userId);
-        } catch (error) {
-            console.log('Could not delete message:', error.message);
-        }
-    }, 60000);
-    
-    messageDeleteTimeouts.set(userId, timeout);
-}
-
-function clearMessageDeleteTimeout(userId) {
-    if (messageDeleteTimeouts.has(userId)) {
-        clearTimeout(messageDeleteTimeouts.get(userId));
-        messageDeleteTimeouts.delete(userId);
     }
 }
 
