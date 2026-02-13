@@ -522,31 +522,39 @@ client.on('interactionCreate', async interaction => {
     if (!interaction.isChatInputCommand() && !interaction.isStringSelectMenu() && !interaction.isButton() && !interaction.isModalSubmit()) return;
 
     if (interaction.isModalSubmit()) {
-        await interaction.deferReply();
-        
-        const parts = interaction.customId.split('_');
-        const gameType = parts[0];
-        const userId = parts[1];
-        
-        if (interaction.user.id !== userId) {
-            return interaction.editReply({ content: '❌ Not your game!' });
-        }
+        try {
+            await interaction.deferReply();
+            console.log('Modal deferred successfully');
+            
+            const parts = interaction.customId.split('_');
+            const gameType = parts[0];
+            const userId = parts[1];
+            
+            console.log('GameType:', gameType, 'UserId:', userId);
+            
+            if (interaction.user.id !== userId) {
+                return interaction.editReply({ content: '❌ Not your game!' });
+            }
 
-        clearGameTimeout(userId);
+            clearGameTimeout(userId);
 
-        const betInput = interaction.fields.getTextInputValue('bet_amount');
-        const bet = parseAmount(betInput);
+            const betInput = interaction.fields.getTextInputValue('bet_amount');
+            console.log('Bet input:', betInput);
+            const bet = parseAmount(betInput);
+            console.log('Parsed bet:', bet);
 
-        if (isNaN(bet) || bet < MIN_BET) {
-            return interaction.editReply({ content: `❌ Minimum bet is **${formatAmount(MIN_BET)}**!` });
-        }
+            if (isNaN(bet) || bet < MIN_BET) {
+                return interaction.editReply({ content: `❌ Minimum bet is **${formatAmount(MIN_BET)}**!` });
+            }
 
-        const balance = getBalance(userId);
-        if (balance < bet) {
-            return interaction.editReply({ content: `❌ Insufficient balance! You have **${formatAmount(balance)}**` });
-        }
+            const balance = getBalance(userId);
+            console.log('User balance:', balance);
+            if (balance < bet) {
+                return interaction.editReply({ content: `❌ Insufficient balance! You have **${formatAmount(balance)}**` });
+            }
 
-        setBalance(userId, balance - bet);
+            setBalance(userId, balance - bet);
+            console.log('Balance deducted, starting game:', gameType);
 
         if (gameType === 'coinflip') {
             const row = new ActionRowBuilder().addComponents(
@@ -595,10 +603,14 @@ client.on('interactionCreate', async interaction => {
             await interaction.editReply({ embeds: [embed], components: [row] });
 
         } else if (gameType.startsWith('mines')) {
+            console.log('Starting mines game');
             const bombs = parseInt(gameType.split('-')[1]);
+            console.log('Bomb count:', bombs);
             const game = new MinesGame(bet, bombs, userId);
+            console.log('Mines game created');
             activeGames.set(userId, game);
             startGameTimeout(userId, bet);
+            console.log('Game stored and timeout started');
 
             const embed = new EmbedBuilder()
                 .setColor(0x0099ff)
@@ -630,8 +642,10 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`minecash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
             );
             rows.push(cashoutRow);
+            console.log('About to send mines reply with', rows.length, 'rows');
 
             await interaction.editReply({ embeds: [embed], components: rows });
+            console.log('Mines game started successfully');
 
         } else if (gameType === 'higherlower') {
             const game = new HigherLowerGame(bet, userId);
@@ -682,6 +696,17 @@ client.on('interactionCreate', async interaction => {
             );
 
             await interaction.editReply({ embeds: [embed], components: [row, cashoutRow] });
+        } catch (error) {
+            console.error('Modal submission error:', error);
+            try {
+                if (interaction.deferred) {
+                    await interaction.editReply({ content: `❌ Error: ${error.message}` });
+                } else {
+                    await interaction.reply({ content: `❌ Error: ${error.message}`, ephemeral: true });
+                }
+            } catch (replyError) {
+                console.error('Could not send error message:', replyError);
+            }
         }
     }
 
