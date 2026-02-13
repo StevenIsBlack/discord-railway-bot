@@ -303,33 +303,33 @@ class MinesGame {
         this.locked = false;
         
         // Calculate increments based on max multipliers
-        // 3 bombs: 21 safe tiles, max 1.5x
-        // 5 bombs: 19 safe tiles, max 2x
-        // 10 bombs: 14 safe tiles, max 3x
-if (bombCount === 3) {
-    this.multiplierIncrement = 0.5 / 22; 
-    this.maxMultiplier = 1.5;
-} else if (bombCount === 5) {
-    this.multiplierIncrement = 1.0 / 20; 
-    this.maxMultiplier = 2.0;
-} else if (bombCount === 10) {
-    this.multiplierIncrement = 2.0 / 15; 
-    this.maxMultiplier = 3.0;
-}
-
+        // 5 bombs: 20 safe tiles, max 1.5x
+        // 7 bombs: 18 safe tiles, max 2x
+        // 12 bombs: 13 safe tiles, max 3x
+        if (bombCount === 5) {
+            this.multiplierIncrement = 0.5 / 20; // (1.5-1) / 20 safe tiles
+            this.maxMultiplier = 1.5;
+        } else if (bombCount === 7) {
+            this.multiplierIncrement = 1.0 / 18; // (2-1) / 18 safe tiles
+            this.maxMultiplier = 2.0;
+        } else if (bombCount === 12) {
+            this.multiplierIncrement = 2.0 / 13; // (3-1) / 13 safe tiles
+            this.maxMultiplier = 3.0;
+        }
+    }
 
     createBoard() {
-        const board = Array(24).fill(false);
+        const board = Array(25).fill(false);
         const bombPositions = new Set();
         while (bombPositions.size < this.bombCount) {
-            bombPositions.add(Math.floor(Math.random() * 24));
+            bombPositions.add(Math.floor(Math.random() * 25));
         }
         bombPositions.forEach(pos => board[pos] = true);
         return board;
     }
 
     reveal(position) {
-        if (this.revealed.has(position) || this.gameOver || this.locked || position < 0 || position > 23) {
+        if (this.revealed.has(position) || this.gameOver || this.locked || position < 0 || position > 24) {
             return { valid: false };
         }
 
@@ -356,9 +356,9 @@ if (bombCount === 3) {
 
     getBoardString() {
         let str = '';
-        // Show 4 rows of 5, then 1 row of 4
-        for (let i = 0; i < 24; i++) {
-            if (i === 5 || i === 10 || i === 15 || i === 20) str += '\n';
+        // Show 5 rows of 5 tiles each
+        for (let i = 0; i < 25; i++) {
+            if (i > 0 && i % 5 === 0) str += '\n';
             if (this.revealed.has(i)) {
                 str += this.board[i] ? '💣' : '💎';
             } else if (this.gameOver) {
@@ -376,8 +376,7 @@ class HigherLowerGame {
     constructor(bet, userId) {
         this.bet = bet;
         this.userId = userId;
-        // Starts with a number between 4 and 6
-        this.currentNumber = Math.floor(Math.random() * 3) + 4; 
+        this.currentNumber = Math.floor(Math.random() * 3) + 4; // 4-6
         this.gameOver = false;
         this.locked = false;
     }
@@ -386,15 +385,13 @@ class HigherLowerGame {
         if (this.gameOver || this.locked) return null;
         this.locked = true;
         
-        // Next number is between 1 and 10
-        const nextNumber = Math.floor(Math.random() * 10) + 1;
+        const nextNumber = Math.floor(Math.random() * 10) + 1; // 1-10
         const isHigher = nextNumber > this.currentNumber;
         const isEqual = nextNumber === this.currentNumber;
         
         let won;
         if (isEqual) {
-            // Usually, hitting the same number results in a loss or a push
-            won = false; 
+            won = false;
         } else {
             won = (choice === 'higher' && isHigher) || (choice === 'lower' && !isHigher);
         }
@@ -644,8 +641,8 @@ client.on('interactionCreate', async interaction => {
                 .setFooter({ text: 'Click tiles to reveal diamonds • Avoid the bombs!' });
 
             const rows = [];
-            // First 4 rows: 5 buttons each (tiles 0-19)
-            for (let r = 0; r < 4; r++) {
+            // 5 rows of 5 buttons each (tiles 0-24)
+            for (let r = 0; r < 5; r++) {
                 const row = new ActionRowBuilder();
                 for (let c = 0; c < 5; c++) {
                     const pos = r * 5 + c;
@@ -659,21 +656,13 @@ client.on('interactionCreate', async interaction => {
                 rows.push(row);
             }
             
-            // Last row: 4 tiles (20-23) + cashout button
-            const lastRow = new ActionRowBuilder();
-            for (let c = 0; c < 4; c++) {
-                const pos = 20 + c;
-                lastRow.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`mine_${pos}_${userId}`)
-                        .setLabel('?')
-                        .setStyle(ButtonStyle.Secondary)
-                );
-            }
-            lastRow.addComponents(
-                new ButtonBuilder().setCustomId(`minecash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
-            );
-            rows.push(lastRow);
+            // Add cashout button as 5th row (since Discord allows max 5 action rows)
+            // We'll replace the last button in the 5th row with cashout
+            rows[4].components[4] = new ButtonBuilder()
+                .setCustomId(`minecash_${userId}`)
+                .setLabel('💰')
+                .setStyle(ButtonStyle.Success)
+                .setDisabled(true);
             
             console.log('About to send mines reply with', rows.length, 'rows');
 
@@ -1026,7 +1015,7 @@ client.on('interactionCreate', async interaction => {
                     .setFooter({ text: 'Click tiles to reveal diamonds • Avoid bombs!' });
 
                 const rows = [];
-                for (let r = 0; r < 4; r++) {
+                for (let r = 0; r < 5; r++) {
                     const row = new ActionRowBuilder();
                     for (let c = 0; c < 5; c++) {
                         const pos = r * 5 + c;
@@ -1040,20 +1029,12 @@ client.on('interactionCreate', async interaction => {
                     rows.push(row);
                 }
                 
-                const lastRow = new ActionRowBuilder();
-                for (let c = 0; c < 4; c++) {
-                    const pos = 20 + c;
-                    lastRow.addComponents(
-                        new ButtonBuilder()
-                            .setCustomId(`mine_${pos}_${userId}`)
-                            .setLabel('?')
-                            .setStyle(ButtonStyle.Secondary)
-                    );
-                }
-                lastRow.addComponents(
-                    new ButtonBuilder().setCustomId(`minecash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
-                );
-                rows.push(lastRow);
+                // Replace last button with cashout
+                rows[4].components[4] = new ButtonBuilder()
+                    .setCustomId(`minecash_${userId}`)
+                    .setLabel('💰')
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(true);
 
                 await interaction.update({ embeds: [embed], components: rows });
             }
@@ -1351,8 +1332,7 @@ client.on('interactionCreate', async interaction => {
                 .setFooter({ text: 'Keep finding diamonds or cashout!' });
 
             const rows = [];
-            // First 4 rows: 5 buttons each (tiles 0-19)
-            for (let r = 0; r < 4; r++) {
+            for (let r = 0; r < 5; r++) {
                 const row = new ActionRowBuilder();
                 for (let c = 0; c < 5; c++) {
                     const pos = r * 5 + c;
@@ -1367,22 +1347,11 @@ client.on('interactionCreate', async interaction => {
                 rows.push(row);
             }
             
-            // Last row: 4 tiles (20-23) + cashout
-            const lastRow = new ActionRowBuilder();
-            for (let c = 0; c < 4; c++) {
-                const pos = 20 + c;
-                lastRow.addComponents(
-                    new ButtonBuilder()
-                        .setCustomId(`mine_${pos}_${userId}`)
-                        .setLabel(game.revealed.has(pos) ? '💎' : '?')
-                        .setStyle(game.revealed.has(pos) ? ButtonStyle.Success : ButtonStyle.Secondary)
-                        .setDisabled(game.revealed.has(pos))
-                );
-            }
-            lastRow.addComponents(
-                new ButtonBuilder().setCustomId(`minecash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success)
-            );
-            rows.push(lastRow);
+            // Replace last button with cashout (enabled now)
+            rows[4].components[4] = new ButtonBuilder()
+                .setCustomId(`minecash_${userId}`)
+                .setLabel('💰')
+                .setStyle(ButtonStyle.Success);
 
             return interaction.update({ embeds: [embed], components: rows });
         }
@@ -1566,9 +1535,9 @@ client.on('interactionCreate', async interaction => {
                         { name: '🪙 Coinflip', value: '50/50 - **2x payout**', inline: true },
                         { name: '🃏 Blackjack', value: 'Beat dealer - **2x payout**', inline: true },
                         { name: '🔢 Higher/Lower', value: 'Guess next number - **2x payout**', inline: true },
-                        { name: '💣 Mines (3 Bombs)', value: 'Easy - **Max 1.5x**', inline: true },
-                        { name: '💣 Mines (5 Bombs)', value: 'Medium - **Max 2x**', inline: true },
-                        { name: '💣 Mines (10 Bombs)', value: 'Hard - **Max 3x**', inline: true },
+                        { name: '💣 Mines (5 Bombs)', value: 'Easy - **Max 1.5x**', inline: true },
+                        { name: '💣 Mines (7 Bombs)', value: 'Medium - **Max 2x**', inline: true },
+                        { name: '💣 Mines (12 Bombs)', value: 'Hard - **Max 3x**', inline: true },
                         { name: '🗼 Tower', value: 'Climb 10 levels - **Max 10x**', inline: true }
                     );
 
@@ -1580,9 +1549,9 @@ client.on('interactionCreate', async interaction => {
                             { label: 'Coinflip', value: 'coinflip', description: '50/50 - 2x', emoji: '🪙' },
                             { label: 'Blackjack', value: 'blackjack', description: 'Beat the dealer - 2x', emoji: '🃏' },
                             { label: 'Higher/Lower', value: 'higherlower', description: 'Guess next number - 2x', emoji: '🔢' },
-                            { label: 'Mines (3 Bombs)', value: 'mines-3', description: 'Easy - Max 1.5x', emoji: '💣' },
-                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Medium - Max 2x', emoji: '💣' },
-                            { label: 'Mines (10 Bombs)', value: 'mines-10', description: 'Hard - Max 3x', emoji: '💣' },
+                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Easy - Max 1.5x', emoji: '💣' },
+                            { label: 'Mines (7 Bombs)', value: 'mines-7', description: 'Medium - Max 2x', emoji: '💣' },
+                            { label: 'Mines (12 Bombs)', value: 'mines-12', description: 'Hard - Max 3x', emoji: '💣' },
                             { label: 'Tower', value: 'tower', description: 'Climb to top - Max 10x', emoji: '🗼' }
                         ])
                 );
