@@ -556,7 +556,7 @@ client.on('interactionCreate', async interaction => {
             setBalance(userId, balance - bet);
             console.log('Balance deducted, starting game:', gameType);
 
-        if (gameType === 'coinflip') {
+            if (gameType === 'coinflip') {
             const row = new ActionRowBuilder().addComponents(
                 new StringSelectMenuBuilder()
                     .setCustomId(`coinflip-choice_${userId}_${bet}`)
@@ -580,7 +580,7 @@ client.on('interactionCreate', async interaction => {
             startGameTimeout(userId, bet);
             await interaction.editReply({ embeds: [embed], components: [row] });
 
-        } else if (gameType === 'blackjack') {
+            } else if (gameType === 'blackjack') {
             const game = new BlackjackGame(bet, userId);
             activeGames.set(userId, game);
             startGameTimeout(userId, bet);
@@ -602,7 +602,7 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.editReply({ embeds: [embed], components: [row] });
 
-        } else if (gameType.startsWith('mines')) {
+            } else if (gameType.startsWith('mines')) {
             console.log('Starting mines game');
             const bombs = parseInt(gameType.split('-')[1]);
             console.log('Bomb count:', bombs);
@@ -647,7 +647,7 @@ client.on('interactionCreate', async interaction => {
             await interaction.editReply({ embeds: [embed], components: rows });
             console.log('Mines game started successfully');
 
-        } else if (gameType === 'higherlower') {
+            } else if (gameType === 'higherlower') {
             const game = new HigherLowerGame(bet, userId);
             activeGames.set(userId, game);
             startGameTimeout(userId, bet);
@@ -669,7 +669,7 @@ client.on('interactionCreate', async interaction => {
 
             await interaction.editReply({ embeds: [embed], components: [row] });
 
-        } else if (gameType === 'tower') {
+            } else if (gameType === 'tower') {
             const game = new TowerGame(bet, userId);
             activeGames.set(userId, game);
             startGameTimeout(userId, bet);
@@ -696,6 +696,7 @@ client.on('interactionCreate', async interaction => {
             );
 
             await interaction.editReply({ embeds: [embed], components: [row, cashoutRow] });
+            }
         } catch (error) {
             console.error('Modal submission error:', error);
             try {
