@@ -155,21 +155,25 @@ function startGameTimeout(userId, bet) {
         clearTimeout(gameTimeouts.get(userId));
     }
     
-    const timeout = setTimeout(() => {
-        if (activeGames.has(userId)) {
-            activeGames.delete(userId);
-            gameTimeouts.delete(userId);
-            setBalance(userId, getBalance(userId) + bet);
-            console.log(`Game timeout for user ${userId} - refunded ${formatAmount(bet)}`);
-        }
-    }, GAME_TIMEOUT);
+    const timeoutData = {
+        timeout: setTimeout(() => {
+            if (activeGames.has(userId)) {
+                activeGames.delete(userId);
+                setBalance(userId, getBalance(userId) + bet);
+                console.log(`Game timeout for user ${userId} - refunded ${formatAmount(bet)}`);
+                gameTimeouts.delete(userId);
+            }
+        }, GAME_TIMEOUT),
+        bet: bet
+    };
     
-    gameTimeouts.set(userId, timeout);
+    gameTimeouts.set(userId, timeoutData);
 }
 
 function clearGameTimeout(userId) {
     if (gameTimeouts.has(userId)) {
-        clearTimeout(gameTimeouts.get(userId));
+        const timeoutData = gameTimeouts.get(userId);
+        clearTimeout(timeoutData.timeout);
         gameTimeouts.delete(userId);
     }
 }
@@ -1848,4 +1852,4 @@ client.on('messageCreate', async (message) => {
 });
 
 client.on('error', console.error);
-client.login(DISCORD_TOKEN);
+client.login(DISCORD_TOKEN); 
