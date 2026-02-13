@@ -544,7 +544,7 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.isModalSubmit()) {
         try {
-            await interaction.deferReply({ ephemeral: false });
+            await interaction.deferReply({ ephemeral: true });
             console.log('Modal deferred successfully');
             
             const parts = interaction.customId.split('_');
@@ -738,15 +738,18 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.isStringSelectMenu()) {
-        const [action, userId, bet] = interaction.customId.split('_');
+        try {
+            await interaction.deferUpdate();
+            
+            const [action, userId, bet] = interaction.customId.split('_');
 
-        if (interaction.user.id !== userId) {
-            return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
-        }
+            if (interaction.user.id !== userId) {
+                return interaction.followUp({ content: '❌ Not your game!', ephemeral: true });
+            }
 
         if (action === 'game-select') {
             if (activeGames.has(userId)) {
-                return interaction.reply({ content: '❌ Finish your current game first!', ephemeral: true });
+                return interaction.followUp({ content: '❌ Finish your current game first!', ephemeral: true });
             }
 
             const gameType = interaction.values[0];
@@ -792,14 +795,20 @@ client.on('interactionCreate', async interaction => {
             );
 
             activeGames.delete(userId);
-            await interaction.update({ embeds: [embed], components: [retryRow] });
+            await interaction.editReply({ embeds: [embed], components: [retryRow] });
             setTimeout(async () => {
                 try {
                     await interaction.editReply({ components: [] });
                 } catch {}
             }, 30000);
         }
+    } catch (error) {
+        console.error('Select menu error:', error);
+        try {
+            await interaction.followUp({ content: '❌ An error occurred. Please try again.', ephemeral: true });
+        } catch {}
     }
+}
 
     if (interaction.isButton()) {
         try {
