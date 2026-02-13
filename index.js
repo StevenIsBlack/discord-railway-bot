@@ -440,12 +440,11 @@ class TowerGame {
         if (this.gameOver || this.locked || this.currentLevel === 0) return 0;
         this.locked = true;
         this.gameOver = true;
-        return Math.floor(this.bet * this.multipliers[this.currentLevel - 1]);
+        return Math.floor(this.bet * this.multipliers[this.currentLevel]);
     }
 
     getMultiplier() {
-        if (this.currentLevel === 0) return 1.0;
-        return this.multipliers[this.currentLevel - 1];
+        return this.multipliers[this.currentLevel];
     }
 }
 
@@ -785,7 +784,7 @@ client.on('interactionCreate', async interaction => {
                 try {
                     await interaction.editReply({ components: [] });
                 } catch {}
-            }, 60000);
+            }, 30000);
         }
     }
 
@@ -866,8 +865,19 @@ client.on('interactionCreate', async interaction => {
         if (action === 'retry') {
             const gameType = parts[1];
             const retryBet = parseInt(parts[3]);
+            
+            console.log('Retry button clicked:', {
+                customId: interaction.customId,
+                parts,
+                action,
+                gameType,
+                userId,
+                actualUserId: interaction.user.id,
+                retryBet
+            });
 
             if (interaction.user.id !== userId) {
+                console.log('User ID mismatch!', interaction.user.id, '!==', userId);
                 return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
             }
 
@@ -905,6 +915,127 @@ client.on('interactionCreate', async interaction => {
                 activeGames.set(userId, { type: 'coinflip', bet: retryBet });
                 startGameTimeout(userId, retryBet);
                 await interaction.update({ embeds: [embed], components: [row] });
+
+            } else if (gameType === 'blackjack') {
+                const game = new BlackjackGame(retryBet, userId);
+                activeGames.set(userId, game);
+                startGameTimeout(userId, retryBet);
+
+                const embed = new EmbedBuilder()
+                    .setColor(0x0099ff)
+                    .setTitle('🃏 Blackjack')
+                    .addFields(
+                        { name: 'Your Hand', value: `${game.handToString(game.playerHand)} (${game.calculateValue(game.playerHand)})`, inline: true },
+                        { name: 'Dealer Hand', value: game.getDealerVisibleHand(), inline: true },
+                        { name: 'Bet', value: formatAmount(retryBet), inline: false }
+                    )
+                    .setFooter({ text: 'Hit to draw • Stand to end turn' });
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`hit_${userId}`).setLabel('Hit').setStyle(ButtonStyle.Primary).setEmoji('🎴'),
+                    new ButtonBuilder().setCustomId(`stand_${userId}`).setLabel('Stand').setStyle(ButtonStyle.Success).setEmoji('✋')
+                );
+
+                await interaction.update({ embeds: [embed], components: [row] });
+
+            } else if (gameType === 'higherlower') {
+                const game = new HigherLowerGame(retryBet, userId);
+                activeGames.set(userId, game);
+                startGameTimeout(userId, retryBet);
+
+                const embed = new EmbedBuilder()
+                    .setColor(0xe74c3c)
+                    .setTitle('🔢 Higher or Lower')
+                    .setDescription(`**Current Number:** ${game.currentNumber}`)
+                    .addFields(
+                        { name: 'Bet', value: formatAmount(retryBet), inline: true },
+                        { name: 'Potential Win', value: formatAmount(retryBet * 2), inline: true }
+                    )
+                    .setFooter({ text: 'Will the next number be higher or lower?' });
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`higher_${userId}`).setLabel('📈 Higher').setStyle(ButtonStyle.Success),
+                    new ButtonBuilder().setCustomId(`lower_${userId}`).setLabel('📉 Lower').setStyle(ButtonStyle.Danger)
+                );
+
+                await interaction.update({ embeds: [embed], components: [row] });
+
+            } else if (gameType === 'tower') {
+                const game = new TowerGame(retryBet, userId);
+                activeGames.set(userId, game);
+                startGameTimeout(userId, retryBet);
+
+                const embed = new EmbedBuilder()
+                    .setColor(0x9b59b6)
+                    .setTitle('🗼 Tower')
+                    .setDescription(`**Level:** ${game.currentLevel + 1}/${game.maxLevels}`)
+                    .addFields(
+                        { name: 'Bet', value: formatAmount(retryBet), inline: true },
+                        { name: 'Current Multiplier', value: `${game.getMultiplier().toFixed(2)}x`, inline: true },
+                        { name: 'Potential Win', value: formatAmount(Math.floor(retryBet * game.getMultiplier())), inline: true }
+                    )
+                    .setFooter({ text: 'Choose the safe tile! Wrong tile = game over' });
+
+                const row = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`tower_0_${userId}`).setLabel('Tile 1').setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId(`tower_1_${userId}`).setLabel('Tile 2').setStyle(ButtonStyle.Secondary),
+                    new ButtonBuilder().setCustomId(`tower_2_${userId}`).setLabel('Tile 3').setStyle(ButtonStyle.Secondary)
+                );
+
+                const cashoutRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`towercash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
+                );
+
+                await interaction.update({ embeds: [embed], components: [row, cashoutRow] });
+
+            } else if (gameType.startsWith('mines-')) {
+                const bombs = parseInt(gameType.split('-')[1]);
+                const game = new MinesGame(retryBet, bombs, userId);
+                activeGames.set(userId, game);
+                startGameTimeout(userId, retryBet);
+
+                const embed = new EmbedBuilder()
+                    .setColor(0x0099ff)
+                    .setTitle('💣 Mines')
+                    .setDescription(game.getBoardString())
+                    .addFields(
+                        { name: 'Bet', value: formatAmount(retryBet), inline: true },
+                        { name: 'Bombs', value: `${bombs}`, inline: true },
+                        { name: 'Multiplier', value: `${game.multiplier.toFixed(2)}x`, inline: true }
+                    )
+                    .setFooter({ text: 'Click tiles to reveal diamonds • Avoid bombs!' });
+
+                const rows = [];
+                for (let r = 0; r < 4; r++) {
+                    const row = new ActionRowBuilder();
+                    for (let c = 0; c < 5; c++) {
+                        const pos = r * 5 + c;
+                        row.addComponents(
+                            new ButtonBuilder()
+                                .setCustomId(`mine_${pos}_${userId}`)
+                                .setLabel('?')
+                                .setStyle(ButtonStyle.Secondary)
+                        );
+                    }
+                    rows.push(row);
+                }
+                
+                const lastRow = new ActionRowBuilder();
+                for (let c = 0; c < 4; c++) {
+                    const pos = 20 + c;
+                    lastRow.addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(`mine_${pos}_${userId}`)
+                            .setLabel('?')
+                            .setStyle(ButtonStyle.Secondary)
+                    );
+                }
+                lastRow.addComponents(
+                    new ButtonBuilder().setCustomId(`minecash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
+                );
+                rows.push(lastRow);
+
+                await interaction.update({ embeds: [embed], components: rows });
             }
             return;
         }
@@ -948,7 +1079,7 @@ client.on('interactionCreate', async interaction => {
                 try {
                     await interaction.editReply({ components: [] });
                 } catch {}
-            }, 60000);
+            }, 30000);
             return;
         }
 
@@ -983,7 +1114,7 @@ client.on('interactionCreate', async interaction => {
                     try {
                         await interaction.editReply({ components: [] });
                     } catch {}
-                }, 60000);
+                }, 30000);
                 return;
             }
 
@@ -1011,7 +1142,7 @@ client.on('interactionCreate', async interaction => {
                     try {
                         await interaction.editReply({ components: [] });
                     } catch {}
-                }, 60000);
+                }, 30000);
                 return;
             }
 
@@ -1067,7 +1198,7 @@ client.on('interactionCreate', async interaction => {
                 try {
                     await interaction.editReply({ components: [] });
                 } catch {}
-            }, 60000);
+            }, 30000);
             return;
         }
 
@@ -1101,7 +1232,7 @@ client.on('interactionCreate', async interaction => {
                     try {
                         await interaction.editReply({ components: [] });
                     } catch {}
-                }, 60000);
+                }, 30000);
                 return;
             }
 
@@ -1152,7 +1283,7 @@ client.on('interactionCreate', async interaction => {
                 try {
                     await interaction.editReply({ components: [] });
                 } catch {}
-            }, 60000);
+            }, 30000);
             return;
         }
 
@@ -1185,7 +1316,7 @@ client.on('interactionCreate', async interaction => {
                     try {
                         await interaction.editReply({ components: [] });
                     } catch {}
-                }, 60000);
+                }, 30000);
                 return;
             }
 
@@ -1263,7 +1394,7 @@ client.on('interactionCreate', async interaction => {
                 try {
                     await interaction.editReply({ components: [] });
                 } catch {}
-            }, 60000);
+            }, 30000);
             return;
         }
     }
