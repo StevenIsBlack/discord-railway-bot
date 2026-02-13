@@ -28,7 +28,6 @@ const userSpamWarnings = new Map();
 const userBalances = new Map();
 const activeGames = new Map();
 const gameTimeouts = new Map();
-const messageDeleteTimeouts = new Map();
 const pendingCashouts = new Map();
 const MEMBER_ROLE_ID = '1442921893786161387';
 const MIN_BET = 500000;
@@ -180,32 +179,6 @@ function clearGameTimeout(userId) {
     if (gameTimeouts.has(userId)) {
         clearTimeout(gameTimeouts.get(userId));
         gameTimeouts.delete(userId);
-    }
-}
-
-function startMessageDeleteTimeout(userId, interaction) {
-    // Clear any existing timeout
-    if (messageDeleteTimeouts.has(userId)) {
-        clearTimeout(messageDeleteTimeouts.get(userId));
-    }
-    
-    // Delete full message after 60 seconds
-    const timeout = startMessageDeleteTimeout(userId, interaction);
-        try {
-            await interaction.deleteReply();
-            messageDeleteTimeouts.delete(userId);
-        } catch (error) {
-            console.log('Could not delete message:', error.message);
-        }
-    }, 60000);
-    
-    messageDeleteTimeouts.set(userId, timeout);
-}
-
-function clearMessageDeleteTimeout(userId) {
-    if (messageDeleteTimeouts.has(userId)) {
-        clearTimeout(messageDeleteTimeouts.get(userId));
-        messageDeleteTimeouts.delete(userId);
     }
 }
 
@@ -411,7 +384,7 @@ class HigherLowerGame {
     constructor(bet, userId) {
         this.bet = bet;
         this.userId = userId;
-        this.currentNumber = Math.floor(Math.random() * 100) + 1;
+        this.currentNumber = Math.floor(Math.random() * 3) + 4; // Random 4-6
         this.gameOver = false;
         this.locked = false;
     }
@@ -420,7 +393,7 @@ class HigherLowerGame {
         if (this.gameOver || this.locked) return null;
         this.locked = true;
         
-        const nextNumber = Math.floor(Math.random() * 100) + 1;
+        const nextNumber = Math.floor(Math.random() * 10) + 1; // Random 1-10
         const isHigher = nextNumber > this.currentNumber;
         const isEqual = nextNumber === this.currentNumber;
         
