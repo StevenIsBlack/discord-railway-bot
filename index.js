@@ -738,18 +738,15 @@ client.on('interactionCreate', async interaction => {
     }
 
     if (interaction.isStringSelectMenu()) {
-        try {
-            await interaction.deferUpdate();
-            
-            const [action, userId, bet] = interaction.customId.split('_');
+        const [action, userId, bet] = interaction.customId.split('_');
 
-            if (interaction.user.id !== userId) {
-                return interaction.followUp({ content: '❌ Not your game!', ephemeral: true });
-            }
+        if (interaction.user.id !== userId) {
+            return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
+        }
 
         if (action === 'game-select') {
             if (activeGames.has(userId)) {
-                return interaction.followUp({ content: '❌ Finish your current game first!', ephemeral: true });
+                return interaction.reply({ content: '❌ Finish your current game first!', ephemeral: true });
             }
 
             const gameType = interaction.values[0];
@@ -770,45 +767,48 @@ client.on('interactionCreate', async interaction => {
             await interaction.showModal(modal);
 
         } else if (action === 'coinflip-choice') {
-            const choice = interaction.values[0];
-            const betAmount = parseInt(bet);
-            const result = playCoinflip(choice, betAmount);
+            try {
+                await interaction.deferUpdate();
+                
+                const choice = interaction.values[0];
+                const betAmount = parseInt(bet);
+                const result = playCoinflip(choice, betAmount);
 
-            clearGameTimeout(userId);
+                clearGameTimeout(userId);
 
-            if (result.won) {
-                setBalance(userId, getBalance(userId) + result.payout);
-            }
+                if (result.won) {
+                    setBalance(userId, getBalance(userId) + result.payout);
+                }
 
-            const embed = new EmbedBuilder()
-                .setColor(result.won ? 0x00ff00 : 0xff0000)
-                .setTitle(`🪙 Coinflip - ${result.won ? 'WIN!' : 'LOSE!'}`)
-                .addFields(
-                    { name: 'Your Choice', value: choice.charAt(0).toUpperCase() + choice.slice(1), inline: true },
-                    { name: 'Result', value: result.result.charAt(0).toUpperCase() + result.result.slice(1), inline: true },
-                    { name: result.won ? 'Won' : 'Lost', value: formatAmount(betAmount), inline: true },
-                    { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
+                const embed = new EmbedBuilder()
+                    .setColor(result.won ? 0x00ff00 : 0xff0000)
+                    .setTitle(`🪙 Coinflip - ${result.won ? 'WIN!' : 'LOSE!'}`)
+                    .addFields(
+                        { name: 'Your Choice', value: choice.charAt(0).toUpperCase() + choice.slice(1), inline: true },
+                        { name: 'Result', value: result.result.charAt(0).toUpperCase() + result.result.slice(1), inline: true },
+                        { name: result.won ? 'Won' : 'Lost', value: formatAmount(betAmount), inline: true },
+                        { name: 'New Balance', value: formatAmount(getBalance(userId)), inline: false }
+                    );
+
+                const retryRow = new ActionRowBuilder().addComponents(
+                    new ButtonBuilder().setCustomId(`retry_coinflip_${userId}_${betAmount}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
                 );
 
-            const retryRow = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`retry_coinflip_${userId}_${betAmount}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
-            );
-
-            activeGames.delete(userId);
-            await interaction.editReply({ embeds: [embed], components: [retryRow] });
-            setTimeout(async () => {
+                activeGames.delete(userId);
+                await interaction.editReply({ embeds: [embed], components: [retryRow] });
+                setTimeout(async () => {
+                    try {
+                        await interaction.editReply({ components: [] });
+                    } catch {}
+                }, 30000);
+            } catch (error) {
+                console.error('Coinflip choice error:', error);
                 try {
-                    await interaction.editReply({ components: [] });
+                    await interaction.followUp({ content: '❌ An error occurred. Please try again.', ephemeral: true });
                 } catch {}
-            }, 30000);
+            }
         }
-    } catch (error) {
-        console.error('Select menu error:', error);
-        try {
-            await interaction.followUp({ content: '❌ An error occurred. Please try again.', ephemeral: true });
-        } catch {}
     }
-}
 
     if (interaction.isButton()) {
         try {
