@@ -792,7 +792,19 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isButton()) {
         const parts = interaction.customId.split('_');
         const action = parts[0];
-        const userId = parts[parts.length - 1];
+        
+        // Extract userId based on button type
+        let userId;
+        if (action === 'retry') {
+            // retry_gametype_userId_bet
+            userId = parts[2];
+        } else if (action === 'cashout-confirm' || action === 'cashout-decline') {
+            // cashout-confirm_userId or cashout-decline_userId
+            userId = parts[1];
+        } else {
+            // Most other buttons: action_userId or action_param_userId
+            userId = parts[parts.length - 1];
+        }
         
         if (action === 'cashout-confirm') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
