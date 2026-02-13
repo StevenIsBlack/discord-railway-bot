@@ -150,25 +150,17 @@ function formatAmount(amount) {
     return amount.toString();
 }
 
-function startGameTimeout(userId, bet, interaction) {
+function startGameTimeout(userId, bet) {
     if (gameTimeouts.has(userId)) {
         clearTimeout(gameTimeouts.get(userId));
     }
     
-    const timeout = setTimeout(async () => {
+    const timeout = setTimeout(() => {
         if (activeGames.has(userId)) {
             activeGames.delete(userId);
             gameTimeouts.delete(userId);
             setBalance(userId, getBalance(userId) + bet);
             console.log(`Game timeout for user ${userId} - refunded ${formatAmount(bet)}`);
-            
-            // Delete the entire message after 1 minute of inactivity
-            try {
-                await interaction.deleteReply();
-                console.log(`Deleted inactive game message for user ${userId}`);
-            } catch (error) {
-                console.log(`Could not delete message:`, error.message);
-            }
         }
     }, GAME_TIMEOUT);
     
@@ -602,13 +594,13 @@ client.on('interactionCreate', async interaction => {
                 );
 
             activeGames.set(userId, { type: 'coinflip', bet });
-            startGameTimeout(userId, bet, interaction);
+            startGameTimeout(userId, bet);
             await interaction.editReply({ embeds: [embed], components: [row] });
 
             } else if (gameType === 'blackjack') {
             const game = new BlackjackGame(bet, userId);
             activeGames.set(userId, game);
-            startGameTimeout(userId, bet, interaction);
+            startGameTimeout(userId, bet);
 
             const embed = new EmbedBuilder()
                 .setColor(0x0099ff)
@@ -634,7 +626,7 @@ client.on('interactionCreate', async interaction => {
             const game = new MinesGame(bet, bombs, userId);
             console.log('Mines game created');
             activeGames.set(userId, game);
-            startGameTimeout(userId, bet, interaction);
+            startGameTimeout(userId, bet);
             console.log('Game stored and timeout started');
 
             const embed = new EmbedBuilder()
@@ -688,7 +680,7 @@ client.on('interactionCreate', async interaction => {
             } else if (gameType === 'higherlower') {
             const game = new HigherLowerGame(bet, userId);
             activeGames.set(userId, game);
-            startGameTimeout(userId, bet, interaction);
+            startGameTimeout(userId, bet);
 
             const embed = new EmbedBuilder()
                 .setColor(0xe74c3c)
@@ -710,7 +702,7 @@ client.on('interactionCreate', async interaction => {
             } else if (gameType === 'tower') {
             const game = new TowerGame(bet, userId);
             activeGames.set(userId, game);
-            startGameTimeout(userId, bet, interaction);
+            startGameTimeout(userId, bet);
 
             const embed = new EmbedBuilder()
                 .setColor(0x9b59b6)
