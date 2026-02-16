@@ -174,27 +174,16 @@ async function logGameResult(userId, username, gameType, bet, result, payout, wo
     }
 }
 
-        const embed = new EmbedBuilder()
-            .setColor(won ? 0x00ff00 : 0xff0000)
-            .setTitle(`${won ? '✅ WIN' : '❌ LOSS'} - ${gameType}`)
-            .setThumbnail(user.displayAvatarURL())
-            .addFields(
-                { name: '👤 Player', value: `${user.tag} (${user.id})`, inline: true },
-                { name: '🎮 Game', value: gameType, inline: true },
-                { name: '💰 Bet', value: formatAmount(bet), inline: true },
-                { name: '📊 Result', value: result || (won ? 'Won' : 'Lost'), inline: true },
-                { name: '💸 Payout', value: formatAmount(payout), inline: true },
-                { name: '📈 Profit/Loss', value: `${profit >= 0 ? '+' : ''}${formatAmount(profit)}`, inline: true },
-                { name: '💳 New Balance', value: formatAmount(newBalance), inline: false }
-            )
-            .setTimestamp();
-
-        await logsChannel.send({ embeds: [embed] });
-    } catch (error) {
-        console.error('Failed to log gamble result:', error);
+function startGameTimeout(userId, bet) {
+    if (gameTimeouts.has(userId)) {
+        clearTimeout(gameTimeouts.get(userId).timeout);
     }
-}
-
+    
+    const timeoutData = {
+        timeout: setTimeout(() => {
+            if (activeGames.has(userId)) {
+                activeGames.delete(userId);
+                setBalance(userId, getBalance(userId) + bet);
                 console.log(`Game timeout for user ${userId} - refunded ${formatAmount(bet)}`);
                 gameTimeouts.delete(userId);
                 
