@@ -631,7 +631,7 @@ client.on('interactionCreate', async interaction => {
 
             activeGames.set(userId, { type: 'coinflip', bet });
             startGameTimeout(userId, bet);
-            await interaction.editReply({ embeds: [embed], components: [row] });
+            await interaction.update({ embeds: [embed], components: [row] });
 
             } else if (gameType === 'blackjack') {
             const game = new BlackjackGame(bet, userId);
@@ -653,7 +653,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`stand_${userId}`).setLabel('Stand').setStyle(ButtonStyle.Success).setEmoji('✋')
             );
 
-            await interaction.editReply({ embeds: [embed], components: [row] });
+            await interaction.update({ embeds: [embed], components: [row] });
 
             } else if (gameType.startsWith('mines')) {
             console.log('Starting mines game');
@@ -702,7 +702,7 @@ client.on('interactionCreate', async interaction => {
             
             console.log('About to send mines reply with', rows.length, 'rows');
 
-            await interaction.editReply({ embeds: [embed], components: rows });
+            await interaction.update({ embeds: [embed], components: rows });
             console.log('Mines game started successfully');
 
             } else if (gameType === 'higherlower') {
@@ -725,7 +725,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`lower_${userId}`).setLabel('📉 Lower').setStyle(ButtonStyle.Danger)
             );
 
-            await interaction.editReply({ embeds: [embed], components: [row] });
+            await interaction.update({ embeds: [embed], components: [row] });
 
             } else if (gameType === 'tower') {
             const game = new TowerGame(bet, userId);
@@ -753,7 +753,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`towercash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
             );
 
-            await interaction.editReply({ embeds: [embed], components: [row, cashoutRow] });
+            await interaction.update({ embeds: [embed], components: [row, cashoutRow] });
             }
         } catch (error) {
             console.error('Modal submission error:', error);
@@ -804,7 +804,7 @@ client.on('interactionCreate', async interaction => {
 
         } else if (action === 'coinflip-choice') {
             try {
-                await interaction.deferUpdate();
+                await interaction.deferReply({ ephemeral: true });
                 
                 const choice = interaction.values[0];
                 const betAmount = parseInt(bet);
@@ -842,7 +842,7 @@ client.on('interactionCreate', async interaction => {
                 );
 
                 activeGames.delete(userId);
-                await interaction.editReply({ embeds: [embed], components: [retryRow] });
+                await interaction.update({ embeds: [embed], components: [retryRow] });
                 setTimeout(async () => {
                     try {
                         await interaction.editReply({ components: [] });
@@ -859,9 +859,6 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.isButton()) {
         try {
-            // ALWAYS defer update first to prevent buttons from disappearing
-            await interaction.deferUpdate().catch(() => {});
-            
             const parts = interaction.customId.split('_');
             const action = parts[0];
             
@@ -880,12 +877,12 @@ client.on('interactionCreate', async interaction => {
         
         if (action === 'cashout-confirm') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return interaction.followUp({ content: '❌ Admin only!', ephemeral: true });
+                return interaction.editReply({ content: '❌ Admin only!', ephemeral: true });
             }
 
             const cashoutData = pendingCashouts.get(userId);
             if (!cashoutData) {
-                return interaction.followUp({ content: '❌ Cashout request not found!', ephemeral: true });
+                return interaction.editReply({ content: '❌ Cashout request not found!', ephemeral: true });
             }
 
             setBalance(userId, 0);
@@ -897,7 +894,7 @@ client.on('interactionCreate', async interaction => {
                 .setDescription(`**User:** <@${userId}>\n**Minecraft Username:** ${cashoutData.mcUsername}\n**Amount:** ${formatAmount(cashoutData.amount)}\n\n**Status:** Paid & Balance Reset`)
                 .setTimestamp();
 
-            await interaction.editReply({ embeds: [embed], components: [] });
+            await interaction.update({ embeds: [embed], components: [] });
 
             try {
                 const user = await client.users.fetch(userId);
@@ -909,12 +906,12 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'cashout-decline') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return interaction.followUp({ content: '❌ Admin only!', ephemeral: true });
+                return interaction.editReply({ content: '❌ Admin only!', ephemeral: true });
             }
 
             const cashoutData = pendingCashouts.get(userId);
             if (!cashoutData) {
-                return interaction.followUp({ content: '❌ Cashout request not found!', ephemeral: true });
+                return interaction.editReply({ content: '❌ Cashout request not found!', ephemeral: true });
             }
 
             pendingCashouts.delete(userId);
@@ -925,7 +922,7 @@ client.on('interactionCreate', async interaction => {
                 .setDescription(`**User:** <@${userId}>\n**Minecraft Username:** ${cashoutData.mcUsername}\n**Amount:** ${formatAmount(cashoutData.amount)}\n\n**Status:** Declined - Balance Kept`)
                 .setTimestamp();
 
-            await interaction.editReply({ embeds: [embed], components: [] });
+            await interaction.update({ embeds: [embed], components: [] });
 
             try {
                 const user = await client.users.fetch(userId);
@@ -951,16 +948,16 @@ client.on('interactionCreate', async interaction => {
 
             if (interaction.user.id !== userId) {
                 console.log('User ID mismatch!', interaction.user.id, '!==', userId);
-                return interaction.followUp({ content: '❌ Not your game!', ephemeral: true });
+                return interaction.editReply({ content: '❌ Not your game!', ephemeral: true });
             }
 
             if (activeGames.has(userId)) {
-                return interaction.followUp({ content: '❌ Finish your current game first!', ephemeral: true });
+                return interaction.editReply({ content: '❌ Finish your current game first!', ephemeral: true });
             }
 
             const balance = getBalance(userId);
             if (balance < retryBet) {
-                return interaction.followUp({ content: `❌ Insufficient balance! You have **${formatAmount(balance)}**`, ephemeral: true });
+                return interaction.editReply({ content: `❌ Insufficient balance! You have **${formatAmount(balance)}**`, ephemeral: true });
             }
 
             setBalance(userId, balance - retryBet);
@@ -987,7 +984,7 @@ client.on('interactionCreate', async interaction => {
 
                 activeGames.set(userId, { type: 'coinflip', bet: retryBet });
                 startGameTimeout(userId, retryBet);
-                await interaction.editReply({ embeds: [embed], components: [row] });
+                await interaction.update({ embeds: [embed], components: [row] });
 
             } else if (gameType === 'blackjack') {
                 const game = new BlackjackGame(retryBet, userId);
@@ -1009,7 +1006,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`stand_${userId}`).setLabel('Stand').setStyle(ButtonStyle.Success).setEmoji('✋')
                 );
 
-                await interaction.editReply({ embeds: [embed], components: [row] });
+                await interaction.update({ embeds: [embed], components: [row] });
 
             } else if (gameType === 'higherlower') {
                 const game = new HigherLowerGame(retryBet, userId);
@@ -1031,7 +1028,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`lower_${userId}`).setLabel('📉 Lower').setStyle(ButtonStyle.Danger)
                 );
 
-                await interaction.editReply({ embeds: [embed], components: [row] });
+                await interaction.update({ embeds: [embed], components: [row] });
 
             } else if (gameType === 'tower') {
                 const game = new TowerGame(retryBet, userId);
@@ -1059,7 +1056,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`towercash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
                 );
 
-                await interaction.editReply({ embeds: [embed], components: [row, cashoutRow] });
+                await interaction.update({ embeds: [embed], components: [row, cashoutRow] });
 
             } else if (gameType.startsWith('mines-')) {
                 const bombs = parseInt(gameType.split('-')[1]);
@@ -1100,29 +1097,29 @@ client.on('interactionCreate', async interaction => {
                     .setStyle(ButtonStyle.Success)
                     .setDisabled(true);
 
-                await interaction.editReply({ embeds: [embed], components: rows });
+                await interaction.update({ embeds: [embed], components: rows });
             }
             return;
         }
 
         if (interaction.user.id !== userId) {
-            return interaction.followUp({ content: '❌ Not your game!', ephemeral: true });
+            return interaction.editReply({ content: '❌ Not your game!', ephemeral: true });
         }
 
         const game = activeGames.get(userId);
 
         if (action === 'higher' || action === 'lower') {
             if (!game) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
 
             clearGameTimeout(userId);
 
             const result = game.guess(action);
             if (!result) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Action in progress!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Action in progress!', ephemeral: true });
             }
 
             activeGames.delete(userId);
@@ -1156,7 +1153,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`retry_higherlower_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
             );
 
-            await interaction.editReply({ embeds: [embed], components: [retryRow] });
+            await interaction.update({ embeds: [embed], components: [retryRow] });
             setTimeout(async () => {
                 try {
                     await interaction.editReply({ components: [] });
@@ -1167,16 +1164,16 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'tower') {
             if (!game) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
 
             const tileNum = parseInt(parts[1]);
             const result = game.chooseTile(tileNum);
 
             if (!result.valid) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Invalid move!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Invalid move!', ephemeral: true });
             }
 
             if (!result.success) {
@@ -1207,7 +1204,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`retry_tower_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
                 );
 
-                await interaction.editReply({ embeds: [embed], components: [retryRow] });
+                await interaction.update({ embeds: [embed], components: [retryRow] });
                 setTimeout(async () => {
                     try {
                         await interaction.editReply({ components: [] });
@@ -1246,7 +1243,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`retry_tower_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
                 );
 
-                await interaction.editReply({ embeds: [embed], components: [retryRow] });
+                await interaction.update({ embeds: [embed], components: [retryRow] });
                 setTimeout(async () => {
                     try {
                         await interaction.editReply({ components: [] });
@@ -1276,20 +1273,20 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`towercash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success)
             );
 
-            await interaction.editReply({ embeds: [embed], components: [row, cashoutRow] });
+            await interaction.update({ embeds: [embed], components: [row, cashoutRow] });
             return;
         }
 
         if (action === 'towercash') {
             if (!game) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const payout = game.cashout();
             if (payout === 0) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Cannot cashout at level 0!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Cannot cashout at level 0!', ephemeral: true });
             }
 
             clearGameTimeout(userId);
@@ -1321,7 +1318,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`retry_tower_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
             );
 
-            await interaction.editReply({ embeds: [embed], components: [retryRow] });
+            await interaction.update({ embeds: [embed], components: [retryRow] });
             setTimeout(async () => {
                 try {
                     await interaction.editReply({ components: [] });
@@ -1332,14 +1329,14 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'hit') {
             if (!game) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const result = game.hit();
             if (!result) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Action already in progress!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Action already in progress!', ephemeral: true });
             }
 
             if (result.busted) {
@@ -1371,7 +1368,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`retry_blackjack_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
                 );
 
-                await interaction.editReply({ embeds: [embed], components: [retryRow] });
+                await interaction.update({ embeds: [embed], components: [retryRow] });
                 setTimeout(async () => {
                     try {
                         await interaction.editReply({ components: [] });
@@ -1399,14 +1396,14 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'stand') {
             if (!game) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const result = game.stand();
             if (!result) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Action already in progress!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Action already in progress!', ephemeral: true });
             }
 
             clearGameTimeout(userId);
@@ -1442,7 +1439,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`retry_blackjack_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
             );
 
-            await interaction.editReply({ embeds: [embed], components: [retryRow] });
+            await interaction.update({ embeds: [embed], components: [retryRow] });
             setTimeout(async () => {
                 try {
                     await interaction.editReply({ components: [] });
@@ -1453,16 +1450,16 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'mine') {
             if (!game) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const position = parseInt(parts[1]);
             const result = game.reveal(position);
 
             if (!result.valid) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Invalid move!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Invalid move!', ephemeral: true });
             }
 
             if (result.bomb) {
@@ -1493,7 +1490,7 @@ client.on('interactionCreate', async interaction => {
                     new ButtonBuilder().setCustomId(`retry_mines-${game.bombCount}_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
                 );
 
-                await interaction.editReply({ embeds: [embed], components: [retryRow] });
+                await interaction.update({ embeds: [embed], components: [retryRow] });
                 setTimeout(async () => {
                     try {
                         await interaction.editReply({ components: [] });
@@ -1539,14 +1536,14 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'minecash') {
             if (!game) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const payout = game.cashout();
             if (payout === 0) {
-                await interaction.deferUpdate();
-                return interaction.followUp({ content: '❌ Cashout failed!', ephemeral: true });
+                await interaction.deferReply({ ephemeral: true });
+                return interaction.editReply({ content: '❌ Cashout failed!', ephemeral: true });
             }
 
             clearGameTimeout(userId);
@@ -1578,7 +1575,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`retry_mines-${game.bombCount}_${userId}_${game.bet}`).setLabel('🔄 Play Again').setStyle(ButtonStyle.Primary)
             );
 
-            await interaction.editReply({ embeds: [embed], components: [retryRow] });
+            await interaction.update({ embeds: [embed], components: [retryRow] });
             setTimeout(async () => {
                 try {
                     await interaction.editReply({ components: [] });
@@ -1733,36 +1730,72 @@ client.on('interactionCreate', async interaction => {
                     return interaction.reply({ content: `❌ Insufficient balance! You need at least **${formatAmount(MIN_BET)}**\n\nOpen a ticket to add balance.`, ephemeral: true });
                 }
 
-                const embed = new EmbedBuilder()
-                    .setColor(0x9b59b6)
-                    .setTitle('🎰 Welcome to the Casino!')
-                    .setDescription(`**Your Balance:** ${formatAmount(balance)}\n**Minimum Bet:** ${formatAmount(MIN_BET)}\n\n**Choose your game:**`)
-                    .addFields(
-                        { name: '🪙 Coinflip', value: '50/50 - **2x payout**', inline: true },
-                        { name: '🃏 Blackjack', value: 'Beat dealer - **2x payout**', inline: true },
-                        { name: '🔢 Higher/Lower', value: 'Guess next number - **2x payout**', inline: true },
-                        { name: '💣 Mines (5 Bombs)', value: 'Easy - **Max 1.5x**', inline: true },
-                        { name: '💣 Mines (7 Bombs)', value: 'Medium - **Max 2x**', inline: true },
-                        { name: '💣 Mines (12 Bombs)', value: 'Hard - **Max 3x**', inline: true },
-                        { name: '🗼 Tower', value: 'Climb 10 levels - **Max 10x**', inline: true }
+                await interaction.deferReply({ ephemeral: true });
+
+                // Create a private gambling channel for this user
+                const channelName = `${interaction.user.username}-gambling`.toLowerCase().replace(/[^a-z0-9-]/g, '');
+                
+                try {
+                    // Check if they already have a gambling channel
+                    let gamblingChannel = interaction.guild.channels.cache.find(
+                        ch => ch.name === channelName && ch.type === 0
                     );
 
-                const row = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId(`game-select_${interaction.user.id}`)
-                        .setPlaceholder('🎲 Choose a game to play')
-                        .addOptions([
-                            { label: 'Coinflip', value: 'coinflip', description: '50/50 - 2x', emoji: '🪙' },
-                            { label: 'Blackjack', value: 'blackjack', description: 'Beat the dealer - 2x', emoji: '🃏' },
-                            { label: 'Higher/Lower', value: 'higherlower', description: 'Guess next number - 2x', emoji: '🔢' },
-                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Easy - Max 1.5x', emoji: '💣' },
-                            { label: 'Mines (7 Bombs)', value: 'mines-7', description: 'Medium - Max 2x', emoji: '💣' },
-                            { label: 'Mines (12 Bombs)', value: 'mines-12', description: 'Hard - Max 3x', emoji: '💣' },
-                            { label: 'Tower', value: 'tower', description: 'Climb to top - Max 10x', emoji: '🗼' }
-                        ])
-                );
+                    if (!gamblingChannel) {
+                        // Create new channel
+                        gamblingChannel = await interaction.guild.channels.create({
+                            name: channelName,
+                            type: 0, // Text channel
+                            permissionOverwrites: [
+                                {
+                                    id: interaction.guild.id,
+                                    deny: ['ViewChannel'],
+                                },
+                                {
+                                    id: interaction.user.id,
+                                    allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'],
+                                },
+                            ],
+                        });
+                    }
 
-                await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+                    // Send the gambling menu to their private channel
+                    const embed = new EmbedBuilder()
+                        .setColor(0x9b59b6)
+                        .setTitle('🎰 Welcome to the Casino!')
+                        .setDescription(`**Your Balance:** ${formatAmount(balance)}\n**Minimum Bet:** ${formatAmount(MIN_BET)}\n\n**Choose your game:**`)
+                        .addFields(
+                            { name: '🪙 Coinflip', value: '50/50 - **2x payout**', inline: true },
+                            { name: '🃏 Blackjack', value: 'Beat dealer - **2x payout**', inline: true },
+                            { name: '🔢 Higher/Lower', value: 'Guess next number - **2x payout**', inline: true },
+                            { name: '💣 Mines (5 Bombs)', value: 'Easy - **Max 1.5x**', inline: true },
+                            { name: '💣 Mines (7 Bombs)', value: 'Medium - **Max 2x**', inline: true },
+                            { name: '💣 Mines (12 Bombs)', value: 'Hard - **Max 3x**', inline: true },
+                            { name: '🗼 Tower', value: 'Climb 10 levels - **Max 10x**', inline: true }
+                        );
+
+                    const row = new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder()
+                            .setCustomId(`game-select_${interaction.user.id}`)
+                            .setPlaceholder('🎲 Choose a game to play')
+                            .addOptions([
+                                { label: 'Coinflip', value: 'coinflip', description: '50/50 - 2x', emoji: '🪙' },
+                                { label: 'Blackjack', value: 'blackjack', description: 'Beat the dealer - 2x', emoji: '🃏' },
+                                { label: 'Higher/Lower', value: 'higherlower', description: 'Guess next number - 2x', emoji: '🔢' },
+                                { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Easy - Max 1.5x', emoji: '💣' },
+                                { label: 'Mines (7 Bombs)', value: 'mines-7', description: 'Medium - Max 2x', emoji: '💣' },
+                                { label: 'Mines (12 Bombs)', value: 'mines-12', description: 'Hard - Max 3x', emoji: '💣' },
+                                { label: 'Tower', value: 'tower', description: 'Climb to top - Max 10x', emoji: '🗼' }
+                            ])
+                    );
+
+                    await gamblingChannel.send({ content: `${interaction.user}, welcome to your private gambling channel!`, embeds: [embed], components: [row] });
+                    
+                    await interaction.editReply({ content: `✅ Your gambling channel is ready: ${gamblingChannel}` });
+                } catch (error) {
+                    console.error('Error creating gambling channel:', error);
+                    await interaction.editReply({ content: '❌ Failed to create gambling channel. Please try again.' });
+                }
                 break;
             }
 
