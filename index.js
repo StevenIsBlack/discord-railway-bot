@@ -631,7 +631,7 @@ client.on('interactionCreate', async interaction => {
 
             activeGames.set(userId, { type: 'coinflip', bet });
             startGameTimeout(userId, bet);
-            await interaction.update({ embeds: [embed], components: [row] });
+            await interaction.editReply({ embeds: [embed], components: [row] });
 
             } else if (gameType === 'blackjack') {
             const game = new BlackjackGame(bet, userId);
@@ -653,7 +653,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`stand_${userId}`).setLabel('Stand').setStyle(ButtonStyle.Success).setEmoji('✋')
             );
 
-            await interaction.update({ embeds: [embed], components: [row] });
+            await interaction.editReply({ embeds: [embed], components: [row] });
 
             } else if (gameType.startsWith('mines')) {
             console.log('Starting mines game');
@@ -702,7 +702,7 @@ client.on('interactionCreate', async interaction => {
             
             console.log('About to send mines reply with', rows.length, 'rows');
 
-            await interaction.update({ embeds: [embed], components: rows });
+            await interaction.editReply({ embeds: [embed], components: rows });
             console.log('Mines game started successfully');
 
             } else if (gameType === 'higherlower') {
@@ -725,7 +725,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`lower_${userId}`).setLabel('📉 Lower').setStyle(ButtonStyle.Danger)
             );
 
-            await interaction.update({ embeds: [embed], components: [row] });
+            await interaction.editReply({ embeds: [embed], components: [row] });
 
             } else if (gameType === 'tower') {
             const game = new TowerGame(bet, userId);
@@ -753,7 +753,7 @@ client.on('interactionCreate', async interaction => {
                 new ButtonBuilder().setCustomId(`towercash_${userId}`).setLabel('💰 Cashout').setStyle(ButtonStyle.Success).setDisabled(true)
             );
 
-            await interaction.update({ embeds: [embed], components: [row, cashoutRow] });
+            await interaction.editReply({ embeds: [embed], components: [row, cashoutRow] });
             }
         } catch (error) {
             console.error('Modal submission error:', error);
