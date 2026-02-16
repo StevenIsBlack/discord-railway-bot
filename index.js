@@ -804,8 +804,6 @@ client.on('interactionCreate', async interaction => {
 
         } else if (action === 'coinflip-choice') {
             try {
-                await interaction.deferReply({ ephemeral: true });
-                
                 const choice = interaction.values[0];
                 const betAmount = parseInt(bet);
                 const result = playCoinflip(choice, betAmount);
@@ -843,16 +841,8 @@ client.on('interactionCreate', async interaction => {
 
                 activeGames.delete(userId);
                 await interaction.update({ embeds: [embed], components: [retryRow] });
-                setTimeout(async () => {
-                    try {
-                        await interaction.editReply({ components: [] });
-                    } catch {}
-                }, 30000);
             } catch (error) {
                 console.error('Coinflip choice error:', error);
-                try {
-                    await interaction.followUp({ content: '❌ An error occurred. Please try again.', ephemeral: true });
-                } catch {}
             }
         }
     }
