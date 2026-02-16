@@ -153,25 +153,28 @@ function formatAmount(amount) {
 }
 
 async function logGameResult(userId, username, gameType, bet, result, payout, won) {
-    try {
-        const channel = await client.channels.fetch(GAME_LOG_CHANNEL_ID);
-        if (!channel) return;
+    // Don't await - log in background so it doesn't slow down responses
+    setImmediate(async () => {
+        try {
+            const channel = await client.channels.fetch(GAME_LOG_CHANNEL_ID);
+            if (!channel) return;
 
-        const embed = new EmbedBuilder()
-            .setColor(won ? 0x00ff00 : 0xff0000)
-            .setTitle(`${won ? '🎉 WIN' : '💔 LOSS'} - ${gameType.toUpperCase()}`)
-            .addFields(
-                { name: 'Player', value: `<@${userId}> (${username})`, inline: true },
-                { name: 'Bet', value: formatAmount(bet), inline: true },
-                { name: won ? 'Won' : 'Lost', value: formatAmount(won ? payout - bet : bet), inline: true },
-                { name: 'Result', value: result, inline: false }
-            )
-            .setTimestamp();
+            const embed = new EmbedBuilder()
+                .setColor(won ? 0x00ff00 : 0xff0000)
+                .setTitle(`${won ? '🎉 WIN' : '💔 LOSS'} - ${gameType.toUpperCase()}`)
+                .addFields(
+                    { name: 'Player', value: `<@${userId}> (${username})`, inline: true },
+                    { name: 'Bet', value: formatAmount(bet), inline: true },
+                    { name: won ? 'Won' : 'Lost', value: formatAmount(won ? payout - bet : bet), inline: true },
+                    { name: 'Result', value: result, inline: false }
+                )
+                .setTimestamp();
 
-        await channel.send({ embeds: [embed] });
-    } catch (error) {
-        console.error('Failed to log game result:', error);
-    }
+            await channel.send({ embeds: [embed] });
+        } catch (error) {
+            console.error('Failed to log game result:', error);
+        }
+    });
 }
 
 function startGameTimeout(userId, bet) {
@@ -814,7 +817,7 @@ client.on('interactionCreate', async interaction => {
                 }
                 
                 // Log the result
-                await logGameResult(
+                logGameResult(
                     userId,
                     interaction.user.username,
                     'Coinflip',
@@ -1128,7 +1131,7 @@ client.on('interactionCreate', async interaction => {
             }
             
             // Log the result
-            await logGameResult(
+            logGameResult(
                 userId,
                 interaction.user.username,
                 'Higher/Lower',
@@ -1181,7 +1184,7 @@ client.on('interactionCreate', async interaction => {
                 activeGames.delete(userId);
                 
                 // Log the loss
-                await logGameResult(
+                logGameResult(
                     userId,
                     interaction.user.username,
                     'Tower',
@@ -1219,7 +1222,7 @@ client.on('interactionCreate', async interaction => {
                 setBalance(userId, getBalance(userId) + result.payout);
 
                 // Log the win
-                await logGameResult(
+                logGameResult(
                     userId,
                     interaction.user.username,
                     'Tower',
@@ -1294,7 +1297,7 @@ client.on('interactionCreate', async interaction => {
             setBalance(userId, getBalance(userId) + payout);
 
             // Log the cashout
-            await logGameResult(
+            logGameResult(
                 userId,
                 interaction.user.username,
                 'Tower',
@@ -1344,7 +1347,7 @@ client.on('interactionCreate', async interaction => {
                 activeGames.delete(userId);
                 
                 // Log the loss
-                await logGameResult(
+                logGameResult(
                     userId,
                     interaction.user.username,
                     'Blackjack',
@@ -1412,7 +1415,7 @@ client.on('interactionCreate', async interaction => {
 
             // Log the result
             const won = result.result === 'win';
-            await logGameResult(
+            logGameResult(
                 userId,
                 interaction.user.username,
                 'Blackjack',
@@ -1467,7 +1470,7 @@ client.on('interactionCreate', async interaction => {
                 activeGames.delete(userId);
                 
                 // Log the loss
-                await logGameResult(
+                logGameResult(
                     userId,
                     interaction.user.username,
                     'Mines',
@@ -1551,7 +1554,7 @@ client.on('interactionCreate', async interaction => {
             setBalance(userId, getBalance(userId) + payout);
 
             // Log the cashout
-            await logGameResult(
+            logGameResult(
                 userId,
                 interaction.user.username,
                 'Mines',
