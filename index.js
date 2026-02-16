@@ -7,6 +7,11 @@ const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const BOT_API_URL = process.env.BOT_API_URL;
 const CLIENT_ID = process.env.CLIENT_ID;
 const CASHOUT_CHANNEL_ID = process.env.CASHOUT_CHANNEL_ID || '1471178234073841826';
+const LOGS_CHANNEL_ID = '1472978640063959293'; // Channel for win/loss logs
+const GAMBLE_LOGS_CHANNEL_ID = '1472978640063959293';
+const GAMBLING_LOG_CHANNEL_ID = '1472978640063959293';
+const GAMBLING_LOG_CHANNEL_ID = '1472978640063959293';
+const GAMBLING_LOG_CHANNEL_ID = '1472978640063959293';
 
 if (!DISCORD_TOKEN || !BOT_API_URL || !CLIENT_ID) {
     console.error('❌ Missing environment variables!');
@@ -32,6 +37,13 @@ const pendingCashouts = new Map();
 const MEMBER_ROLE_ID = '1442921893786161387';
 const MIN_BET = 500000;
 const GAME_TIMEOUT = 5 * 60 * 1000;
+const GAME_LOG_CHANNEL_ID = '1472978640063959293';
+const GAMBLING_LOG_CHANNEL = '1472978640063959293';
+const GAMBLING_LOG_CHANNEL_ID = '1472978640063959293';
+const GAMBLING_LOG_CHANNEL_ID = '1472978640063959293';
+const LOGS_CHANNEL_ID = '1472978640063959293';
+const GAMBLING_LOG_CHANNEL_ID = '1472978640063959293';
+const GAME_LOG_CHANNEL_ID = '1472978640063959293';
 
 function loadBalances() {
     try {
@@ -89,6 +101,7 @@ const commands = [
     new SlashCommandBuilder().setName('cashout').setDescription('💰 Request to cashout your balance')
         .addStringOption(o => o.setName('minecraft_username').setDescription('Your Minecraft username').setRequired(true)),
     new SlashCommandBuilder().setName('gamble').setDescription('🎰 Start gambling - Choose your game!'),
+    new SlashCommandBuilder().setName('cleargame').setDescription('🔧 Clear your stuck game (if you have one)'),
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
@@ -150,18 +163,56 @@ function formatAmount(amount) {
     return amount.toString();
 }
 
-function startGameTimeout(userId, bet) {
-    if (gameTimeouts.has(userId)) {
-        clearTimeout(gameTimeouts.get(userId));
+async function logGameResult(userId, username, gameType, bet, result, payout, won) {
+    try {
+        const channel = await client.channels.fetch(GAME_LOG_CHANNEL_ID);
+        if (!channel) return;
+
+        const embed = new EmbedBuilder()
+            .setColor(won ? 0x00ff00 : 0xff0000)
+            .setTitle(`${won ? '🎉 WIN' : '💔 LOSS'} - ${gameType.toUpperCase()}`)
+            .addFields(
+                { name: 'Player', value: `<@${userId}> (${username})`, inline: true },
+                { name: 'Bet', value: formatAmount(bet), inline: true },
+                { name: won ? 'Won' : 'Lost', value: formatAmount(won ? payout - bet : bet), inline: true },
+                { name: 'Result', value: result, inline: false }
+            )
+            .setTimestamp();
+
+        await channel.send({ embeds: [embed] });
+    } catch (error) {
+        console.error('Failed to log game result:', error);
     }
-    
-    const timeoutData = {
-        timeout: setTimeout(() => {
-            if (activeGames.has(userId)) {
-                activeGames.delete(userId);
-                setBalance(userId, getBalance(userId) + bet);
+}
+
+        const embed = new EmbedBuilder()
+            .setColor(won ? 0x00ff00 : 0xff0000)
+            .setTitle(`${won ? '✅ WIN' : '❌ LOSS'} - ${gameType}`)
+            .setThumbnail(user.displayAvatarURL())
+            .addFields(
+                { name: '👤 Player', value: `${user.tag} (${user.id})`, inline: true },
+                { name: '🎮 Game', value: gameType, inline: true },
+                { name: '💰 Bet', value: formatAmount(bet), inline: true },
+                { name: '📊 Result', value: result || (won ? 'Won' : 'Lost'), inline: true },
+                { name: '💸 Payout', value: formatAmount(payout), inline: true },
+                { name: '📈 Profit/Loss', value: `${profit >= 0 ? '+' : ''}${formatAmount(profit)}`, inline: true },
+                { name: '💳 New Balance', value: formatAmount(newBalance), inline: false }
+            )
+            .setTimestamp();
+
+        await logsChannel.send({ embeds: [embed] });
+    } catch (error) {
+        console.error('Failed to log gamble result:', error);
+    }
+}
+
                 console.log(`Game timeout for user ${userId} - refunded ${formatAmount(bet)}`);
                 gameTimeouts.delete(userId);
+                
+                // Try to notify the user their game timed out
+                client.users.fetch(userId).then(user => {
+                    user.send(`⏱️ Your game timed out after 5 minutes of inactivity. Your bet of **${formatAmount(bet)}** has been refunded.`).catch(() => {});
+                }).catch(() => {});
             }
         }, GAME_TIMEOUT),
         bet: bet
@@ -544,7 +595,7 @@ client.on('interactionCreate', async interaction => {
 
     if (interaction.isModalSubmit()) {
         try {
-            await interaction.deferReply({ ephemeral: true });
+            await interaction.deferReply({ ephemeral: false });
             console.log('Modal deferred successfully');
             
             const parts = interaction.customId.split('_');
@@ -745,8 +796,12 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (action === 'game-select') {
+            // Force clear any stuck games for this user
             if (activeGames.has(userId)) {
-                return interaction.reply({ content: '❌ Finish your current game first!', ephemeral: true });
+                const stuckGame = activeGames.get(userId);
+                console.log(`Clearing stuck game for user ${userId}:`, stuckGame);
+                activeGames.delete(userId);
+                clearGameTimeout(userId);
             }
 
             const gameType = interaction.values[0];
@@ -779,6 +834,17 @@ client.on('interactionCreate', async interaction => {
                 if (result.won) {
                     setBalance(userId, getBalance(userId) + result.payout);
                 }
+                
+                // Log the result
+                await logGameResult(
+                    userId,
+                    interaction.user.username,
+                    'Coinflip',
+                    betAmount,
+                    `Chose ${choice}, result was ${result.result}`,
+                    result.payout,
+                    result.won
+                );
 
                 const embed = new EmbedBuilder()
                     .setColor(result.won ? 0x00ff00 : 0xff0000)
@@ -1082,6 +1148,17 @@ client.on('interactionCreate', async interaction => {
             if (result.won) {
                 setBalance(userId, getBalance(userId) + result.payout);
             }
+            
+            // Log the result
+            await logGameResult(
+                userId,
+                interaction.user.username,
+                'Higher/Lower',
+                game.bet,
+                `Current: ${result.currentNumber}, Next: ${result.nextNumber}, Guess: ${action}`,
+                result.payout,
+                result.won
+            );
 
             const embed = new EmbedBuilder()
                 .setColor(result.won ? 0x00ff00 : 0xff0000)
@@ -1124,6 +1201,18 @@ client.on('interactionCreate', async interaction => {
             if (!result.success) {
                 clearGameTimeout(userId);
                 activeGames.delete(userId);
+                
+                // Log the loss
+                await logGameResult(
+                    userId,
+                    interaction.user.username,
+                    'Tower',
+                    game.bet,
+                    `Failed at level ${result.level + 1}`,
+                    0,
+                    false
+                );
+                
                 const embed = new EmbedBuilder()
                     .setColor(0xff0000)
                     .setTitle('🗼 Tower - FAILED!')
@@ -1150,6 +1239,17 @@ client.on('interactionCreate', async interaction => {
                 clearGameTimeout(userId);
                 activeGames.delete(userId);
                 setBalance(userId, getBalance(userId) + result.payout);
+
+                // Log the win
+                await logGameResult(
+                    userId,
+                    interaction.user.username,
+                    'Tower',
+                    game.bet,
+                    `Completed all 10 levels! Multiplier: ${game.getMultiplier().toFixed(2)}x`,
+                    result.payout,
+                    true
+                );
 
                 const embed = new EmbedBuilder()
                     .setColor(0xffd700)
@@ -1215,6 +1315,17 @@ client.on('interactionCreate', async interaction => {
             activeGames.delete(userId);
             setBalance(userId, getBalance(userId) + payout);
 
+            // Log the cashout
+            await logGameResult(
+                userId,
+                interaction.user.username,
+                'Tower',
+                game.bet,
+                `Cashed out at level ${game.currentLevel}, Multiplier: ${game.getMultiplier().toFixed(2)}x`,
+                payout,
+                true
+            );
+
             const embed = new EmbedBuilder()
                 .setColor(0x00ff00)
                 .setTitle('🗼 Tower - Cashed Out!')
@@ -1253,6 +1364,18 @@ client.on('interactionCreate', async interaction => {
             if (result.busted) {
                 clearGameTimeout(userId);
                 activeGames.delete(userId);
+                
+                // Log the loss
+                await logGameResult(
+                    userId,
+                    interaction.user.username,
+                    'Blackjack',
+                    game.bet,
+                    `Busted with ${game.calculateValue(game.playerHand)}`,
+                    0,
+                    false
+                );
+                
                 const embed = new EmbedBuilder()
                     .setColor(0xff0000)
                     .setTitle('🃏 Blackjack - BUSTED!')
@@ -1309,6 +1432,18 @@ client.on('interactionCreate', async interaction => {
             activeGames.delete(userId);
             setBalance(userId, getBalance(userId) + result.payout);
 
+            // Log the result
+            const won = result.result === 'win';
+            await logGameResult(
+                userId,
+                interaction.user.username,
+                'Blackjack',
+                game.bet,
+                `Player: ${game.calculateValue(game.playerHand)}, Dealer: ${game.calculateValue(game.dealerHand)} - ${result.result.toUpperCase()}`,
+                result.payout,
+                won
+            );
+
             const color = result.result === 'win' ? 0x00ff00 : result.result === 'lose' ? 0xff0000 : 0xffff00;
             const resultText = result.result === 'win' ? `Won **${formatAmount(result.payout)}**!` : result.result === 'lose' ? `Lost **${formatAmount(game.bet)}**!` : `Push! Bet returned.`;
 
@@ -1352,6 +1487,18 @@ client.on('interactionCreate', async interaction => {
             if (result.bomb) {
                 clearGameTimeout(userId);
                 activeGames.delete(userId);
+                
+                // Log the loss
+                await logGameResult(
+                    userId,
+                    interaction.user.username,
+                    'Mines',
+                    game.bet,
+                    `Hit a bomb! ${game.bombCount} bombs, ${game.revealed.size} tiles revealed`,
+                    0,
+                    false
+                );
+                
                 const embed = new EmbedBuilder()
                     .setColor(0xff0000)
                     .setTitle('💣 Mines - BOOM!')
@@ -1424,6 +1571,17 @@ client.on('interactionCreate', async interaction => {
             clearGameTimeout(userId);
             activeGames.delete(userId);
             setBalance(userId, getBalance(userId) + payout);
+
+            // Log the cashout
+            await logGameResult(
+                userId,
+                interaction.user.username,
+                'Mines',
+                game.bet,
+                `Cashed out! ${game.bombCount} bombs, ${game.revealed.size} tiles revealed, ${game.multiplier.toFixed(2)}x multiplier`,
+                payout,
+                true
+            );
 
             const embed = new EmbedBuilder()
                 .setColor(0x00ff00)
