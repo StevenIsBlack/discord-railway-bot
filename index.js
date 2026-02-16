@@ -1100,16 +1100,16 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'higher' || action === 'lower') {
             if (!game) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
 
             clearGameTimeout(userId);
 
             const result = game.guess(action);
             if (!result) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Action in progress!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Action in progress!', ephemeral: true });
             }
 
             activeGames.delete(userId);
@@ -1154,16 +1154,16 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'tower') {
             if (!game) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
 
             const tileNum = parseInt(parts[1]);
             const result = game.chooseTile(tileNum);
 
             if (!result.valid) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Invalid move!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Invalid move!', ephemeral: true });
             }
 
             if (!result.success) {
@@ -1269,14 +1269,14 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'towercash') {
             if (!game) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const payout = game.cashout();
             if (payout === 0) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Cannot cashout at level 0!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Cannot cashout at level 0!', ephemeral: true });
             }
 
             clearGameTimeout(userId);
@@ -1319,14 +1319,14 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'hit') {
             if (!game) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const result = game.hit();
             if (!result) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Action already in progress!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Action already in progress!', ephemeral: true });
             }
 
             if (result.busted) {
@@ -1386,14 +1386,14 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'stand') {
             if (!game) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const result = game.stand();
             if (!result) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Action already in progress!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Action already in progress!', ephemeral: true });
             }
 
             clearGameTimeout(userId);
@@ -1440,16 +1440,16 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'mine') {
             if (!game) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const position = parseInt(parts[1]);
             const result = game.reveal(position);
 
             if (!result.valid) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Invalid move!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Invalid move!', ephemeral: true });
             }
 
             if (result.bomb) {
@@ -1526,14 +1526,14 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'minecash') {
             if (!game) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Game not found or expired!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const payout = game.cashout();
             if (payout === 0) {
-                await interaction.deferReply({ ephemeral: true });
-                return interaction.editReply({ content: '❌ Cashout failed!', ephemeral: true });
+                // Error case - reply directly
+                return interaction.reply({ content: '❌ Cashout failed!', ephemeral: true });
             }
 
             clearGameTimeout(userId);
