@@ -1717,20 +1717,20 @@ client.on('interactionCreate', async interaction => {
             }
 
             case 'gamble': {
+                await interaction.deferReply({ ephemeral: true });
+                
                 if (!hasRole(interaction.member, MEMBER_ROLE_ID)) {
-                    return interaction.reply({ content: '❌ You need the Member role to gamble!', ephemeral: true });
+                    return interaction.editReply({ content: '❌ You need the Member role to gamble!' });
                 }
 
                 if (activeGames.has(interaction.user.id)) {
-                    return interaction.reply({ content: '❌ You already have an active game! Finish it before starting a new one.', ephemeral: true });
+                    return interaction.editReply({ content: '❌ You already have an active game! Finish it before starting a new one.' });
                 }
 
                 const balance = getBalance(interaction.user.id);
                 if (balance < MIN_BET) {
-                    return interaction.reply({ content: `❌ Insufficient balance! You need at least **${formatAmount(MIN_BET)}**\n\nOpen a ticket to add balance.`, ephemeral: true });
+                    return interaction.editReply({ content: `❌ Insufficient balance! You need at least **${formatAmount(MIN_BET)}**\n\nOpen a ticket to add balance.` });
                 }
-
-                await interaction.deferReply({ ephemeral: true });
 
                 // Create a private gambling channel for this user
                 const channelName = `${interaction.user.username}-gambling`.toLowerCase().replace(/[^a-z0-9-]/g, '');
