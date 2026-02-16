@@ -210,6 +210,22 @@ function clearGameTimeout(userId) {
     }
 }
 
+async function removeGameMenuButtons(interaction) {
+    try {
+        const channel = interaction.channel;
+        const messages = await channel.messages.fetch({ limit: 10 });
+        const gameMenuMessage = messages.find(msg => 
+            msg.author.id === client.user.id && 
+            msg.embeds[0]?.title === '🎰 Welcome to the Casino!'
+        );
+        if (gameMenuMessage) {
+            await gameMenuMessage.edit({ components: [] });
+        }
+    } catch (err) {
+        // Silently fail - not critical
+    }
+}
+
 function playCoinflip(choice, bet) {
     const result = Math.random() < 0.5 ? 'heads' : 'tails';
     const won = result === choice;
@@ -608,6 +624,9 @@ client.on('interactionCreate', async interaction => {
 
             setBalance(userId, balance - bet);
             console.log('Balance deducted, starting game:', gameType);
+
+            // Remove the game selection menu buttons
+            await removeGameMenuButtons(interaction);
 
             if (gameType === 'coinflip') {
             const row = new ActionRowBuilder().addComponents(
