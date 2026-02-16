@@ -1789,7 +1789,27 @@ client.on('interactionCreate', async interaction => {
                             ])
                     );
 
-                    await gamblingChannel.send({ content: `${interaction.user}, welcome to your private gambling channel!`, embeds: [embed], components: [row] });
+                    await gamblingChannel.send({ embeds: [embed], components: [row] });
+                    
+                    // Set auto-delete timer for 5 minutes of inactivity
+                    setTimeout(async () => {
+                        try {
+                            // Check if channel still exists and has no recent activity
+                            const channel = await interaction.guild.channels.fetch(gamblingChannel.id).catch(() => null);
+                            if (channel) {
+                                const messages = await channel.messages.fetch({ limit: 1 });
+                                const lastMessage = messages.first();
+                                const fiveMinutesAgo = Date.now() - (5 * 60 * 1000);
+                                
+                                if (lastMessage && lastMessage.createdTimestamp < fiveMinutesAgo) {
+                                    await channel.delete('Inactive gambling channel');
+                                    console.log(`Deleted inactive gambling channel: ${channel.name}`);
+                                }
+                            }
+                        } catch (error) {
+                            console.error('Error auto-deleting channel:', error);
+                        }
+                    }, 5 * 60 * 1000); // 5 minutes
                     
                     await interaction.editReply({ content: `✅ Your gambling channel is ready: ${gamblingChannel}` });
                 } catch (error) {
