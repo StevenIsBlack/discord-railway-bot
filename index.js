@@ -153,25 +153,27 @@ function formatAmount(amount) {
 }
 
 async function logGameResult(userId, username, gameType, bet, result, payout, won) {
-    try {
-        const channel = await client.channels.fetch(GAME_LOG_CHANNEL_ID);
-        if (!channel) return;
+    setImmediate(async () => {
+        try {
+            const channel = await client.channels.fetch(GAME_LOG_CHANNEL_ID);
+            if (!channel) return;
 
-        const embed = new EmbedBuilder()
-            .setColor(won ? 0x00ff00 : 0xff0000)
-            .setTitle(`${won ? '🎉 WIN' : '💔 LOSS'} - ${gameType.toUpperCase()}`)
-            .addFields(
-                { name: 'Player', value: `<@${userId}> (${username})`, inline: true },
-                { name: 'Bet', value: formatAmount(bet), inline: true },
-                { name: won ? 'Won' : 'Lost', value: formatAmount(won ? payout - bet : bet), inline: true },
-                { name: 'Result', value: result, inline: false }
-            )
-            .setTimestamp();
+            const embed = new EmbedBuilder()
+                .setColor(won ? 0x00ff00 : 0xff0000)
+                .setTitle(`${won ? '🎉 WIN' : '💔 LOSS'} - ${gameType.toUpperCase()}`)
+                .addFields(
+                    { name: 'Player', value: `<@${userId}> (${username})`, inline: true },
+                    { name: 'Bet', value: formatAmount(bet), inline: true },
+                    { name: won ? 'Won' : 'Lost', value: formatAmount(won ? payout - bet : bet), inline: true },
+                    { name: 'Result', value: result, inline: false }
+                )
+                .setTimestamp();
 
-        await channel.send({ embeds: [embed] });
-    } catch (error) {
-        console.error('Failed to log game result:', error);
-    }
+            await channel.send({ embeds: [embed] });
+        } catch (error) {
+            console.error('Failed to log game result:', error);
+        }
+    });
 }
 
 function startGameTimeout(userId, bet) {
@@ -1587,49 +1589,89 @@ client.on('interactionCreate', async interaction => {
             }
 
             case 'gamble': {
+                await interaction.deferReply({ ephemeral: true });
+
                 if (!hasRole(interaction.member, MEMBER_ROLE_ID)) {
-                    return interaction.reply({ content: '❌ You need the Member role to gamble!', ephemeral: true });
+                    return interaction.editReply({ content: '❌ You need the Member role to gamble!' });
                 }
 
                 if (activeGames.has(interaction.user.id)) {
-                    return interaction.reply({ content: '❌ You already have an active game! Finish it before starting a new one.', ephemeral: true });
+                    return interaction.editReply({ content: '❌ You already have an active game! Finish it before starting a new one.' });
                 }
 
                 const balance = getBalance(interaction.user.id);
                 if (balance < MIN_BET) {
-                    return interaction.reply({ content: `❌ Insufficient balance! You need at least **${formatAmount(MIN_BET)}**\n\nOpen a ticket to add balance.`, ephemeral: true });
+                    return interaction.editReply({ content: `❌ Insufficient balance! You need at least **${formatAmount(MIN_BET)}**\n\nOpen a ticket to add balance.` });
                 }
 
-                const embed = new EmbedBuilder()
-                    .setColor(0x9b59b6)
-                    .setTitle('🎰 Welcome to the Casino!')
-                    .setDescription(`**Your Balance:** ${formatAmount(balance)}\n**Minimum Bet:** ${formatAmount(MIN_BET)}\n\n**Choose your game:**`)
-                    .addFields(
-                        { name: '🪙 Coinflip', value: '50/50 - **2x payout**', inline: true },
-                        { name: '🃏 Blackjack', value: 'Beat dealer - **2x payout**', inline: true },
-                        { name: '🔢 Higher/Lower', value: 'Guess next number - **2x payout**', inline: true },
-                        { name: '💣 Mines (5 Bombs)', value: 'Easy - **Max 1.5x**', inline: true },
-                        { name: '💣 Mines (7 Bombs)', value: 'Medium - **Max 2x**', inline: true },
-                        { name: '💣 Mines (12 Bombs)', value: 'Hard - **Max 3x**', inline: true },
-                        { name: '🗼 Tower', value: 'Climb 10 levels - **Max 10x**', inline: true }
+                try {
+                    const channelName = `${interaction.user.username}-gambling`.toLowerCase().replace(/[^a-z0-9-]/g, '');
+
+                    let gamblingChannel = interaction.guild.channels.cache.find(
+                        ch => ch.name === channelName && ch.type === 0
                     );
 
-                const row = new ActionRowBuilder().addComponents(
-                    new StringSelectMenuBuilder()
-                        .setCustomId(`game-select_${interaction.user.id}`)
-                        .setPlaceholder('🎲 Choose a game to play')
-                        .addOptions([
-                            { label: 'Coinflip', value: 'coinflip', description: '50/50 - 2x', emoji: '🪙' },
-                            { label: 'Blackjack', value: 'blackjack', description: 'Beat the dealer - 2x', emoji: '🃏' },
-                            { label: 'Higher/Lower', value: 'higherlower', description: 'Guess next number - 2x', emoji: '🔢' },
-                            { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Easy - Max 1.5x', emoji: '💣' },
-                            { label: 'Mines (7 Bombs)', value: 'mines-7', description: 'Medium - Max 2x', emoji: '💣' },
-                            { label: 'Mines (12 Bombs)', value: 'mines-12', description: 'Hard - Max 3x', emoji: '💣' },
-                            { label: 'Tower', value: 'tower', description: 'Climb to top - Max 10x', emoji: '🗼' }
-                        ])
-                );
+                    if (!gamblingChannel) {
+                        gamblingChannel = await interaction.guild.channels.create({
+                            name: channelName,
+                            type: 0,
+                            permissionOverwrites: [
+                                { id: interaction.guild.id, deny: ['ViewChannel'] },
+                                { id: interaction.user.id, allow: ['ViewChannel', 'SendMessages', 'ReadMessageHistory'] },
+                            ],
+                        });
+                    }
 
-                await interaction.reply({ embeds: [embed], components: [row], ephemeral: true });
+                    const embed = new EmbedBuilder()
+                        .setColor(0x9b59b6)
+                        .setTitle('🎰 Welcome to the Casino!')
+                        .setDescription(`**Your Balance:** ${formatAmount(balance)}\n**Minimum Bet:** ${formatAmount(MIN_BET)}\n\n**Choose your game:**`)
+                        .addFields(
+                            { name: '🪙 Coinflip', value: '50/50 - **2x payout**', inline: true },
+                            { name: '🃏 Blackjack', value: 'Beat dealer - **2x payout**', inline: true },
+                            { name: '🔢 Higher/Lower', value: 'Guess next number - **2x payout**', inline: true },
+                            { name: '💣 Mines (5 Bombs)', value: 'Easy - **Max 1.5x**', inline: true },
+                            { name: '💣 Mines (7 Bombs)', value: 'Medium - **Max 2x**', inline: true },
+                            { name: '💣 Mines (12 Bombs)', value: 'Hard - **Max 3x**', inline: true },
+                            { name: '🗼 Tower', value: 'Climb 10 levels - **Max 10x**', inline: true }
+                        );
+
+                    const row = new ActionRowBuilder().addComponents(
+                        new StringSelectMenuBuilder()
+                            .setCustomId(`game-select_${interaction.user.id}`)
+                            .setPlaceholder('🎲 Choose a game to play')
+                            .addOptions([
+                                { label: 'Coinflip', value: 'coinflip', description: '50/50 - 2x', emoji: '🪙' },
+                                { label: 'Blackjack', value: 'blackjack', description: 'Beat the dealer - 2x', emoji: '🃏' },
+                                { label: 'Higher/Lower', value: 'higherlower', description: 'Guess next number - 2x', emoji: '🔢' },
+                                { label: 'Mines (5 Bombs)', value: 'mines-5', description: 'Easy - Max 1.5x', emoji: '💣' },
+                                { label: 'Mines (7 Bombs)', value: 'mines-7', description: 'Medium - Max 2x', emoji: '💣' },
+                                { label: 'Mines (12 Bombs)', value: 'mines-12', description: 'Hard - Max 3x', emoji: '💣' },
+                                { label: 'Tower', value: 'tower', description: 'Climb to top - Max 10x', emoji: '🗼' }
+                            ])
+                    );
+
+                    await gamblingChannel.send({ embeds: [embed], components: [row] });
+
+                    // Auto-delete after 5 minutes of inactivity
+                    setTimeout(async () => {
+                        try {
+                            const ch = await interaction.guild.channels.fetch(gamblingChannel.id).catch(() => null);
+                            if (ch) {
+                                const msgs = await ch.messages.fetch({ limit: 1 });
+                                const last = msgs.first();
+                                if (last && last.createdTimestamp < Date.now() - 5 * 60 * 1000) {
+                                    await ch.delete('Inactive gambling channel');
+                                }
+                            }
+                        } catch {}
+                    }, 5 * 60 * 1000);
+
+                    await interaction.editReply({ content: `✅ Your gambling channel is ready: ${gamblingChannel}` });
+                } catch (error) {
+                    console.error('Error creating gambling channel:', error);
+                    await interaction.editReply({ content: '❌ Failed to create gambling channel. Please try again.' });
+                }
                 break;
             }
 
