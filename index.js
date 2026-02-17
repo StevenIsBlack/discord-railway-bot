@@ -774,12 +774,9 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (action === 'game-select') {
-            // Force clear any stuck games for this user
+            // Block if there's already an active game
             if (activeGames.has(userId)) {
-                const stuckGame = activeGames.get(userId);
-                console.log(`Clearing stuck game for user ${userId}:`, stuckGame);
-                activeGames.delete(userId);
-                clearGameTimeout(userId);
+                return interaction.reply({ content: '❌ You already have an active game! Finish it first before starting a new one.', ephemeral: true });
             }
 
             const gameType = interaction.values[0];
@@ -865,12 +862,12 @@ client.on('interactionCreate', async interaction => {
         
         if (action === 'cashout-confirm') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return interaction.followUp({ content: '❌ Admin only!', ephemeral: true });
+                return interaction.reply({ content: '❌ Admin only!', ephemeral: true });
             }
 
             const cashoutData = pendingCashouts.get(userId);
             if (!cashoutData) {
-                return interaction.followUp({ content: '❌ Cashout request not found!', ephemeral: true });
+                return interaction.reply({ content: '❌ Cashout request not found!', ephemeral: true });
             }
 
             setBalance(userId, 0);
@@ -894,12 +891,12 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'cashout-decline') {
             if (!interaction.member.permissions.has(PermissionFlagsBits.Administrator)) {
-                return interaction.followUp({ content: '❌ Admin only!', ephemeral: true });
+                return interaction.reply({ content: '❌ Admin only!', ephemeral: true });
             }
 
             const cashoutData = pendingCashouts.get(userId);
             if (!cashoutData) {
-                return interaction.followUp({ content: '❌ Cashout request not found!', ephemeral: true });
+                return interaction.reply({ content: '❌ Cashout request not found!', ephemeral: true });
             }
 
             pendingCashouts.delete(userId);
@@ -936,16 +933,16 @@ client.on('interactionCreate', async interaction => {
 
             if (interaction.user.id !== userId) {
                 console.log('User ID mismatch!', interaction.user.id, '!==', userId);
-                return interaction.followUp({ content: '❌ Not your game!', ephemeral: true });
+                return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
             }
 
             if (activeGames.has(userId)) {
-                return interaction.followUp({ content: '❌ Finish your current game first!', ephemeral: true });
+                return interaction.reply({ content: '❌ Finish your current game first!', ephemeral: true });
             }
 
             const balance = getBalance(userId);
             if (balance < retryBet) {
-                return interaction.followUp({ content: `❌ Insufficient balance! You have **${formatAmount(balance)}**`, ephemeral: true });
+                return interaction.reply({ content: `❌ Insufficient balance! You have **${formatAmount(balance)}**`, ephemeral: true });
             }
 
             setBalance(userId, balance - retryBet);
@@ -1091,21 +1088,21 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (interaction.user.id !== userId) {
-            return interaction.followUp({ content: '❌ Not your game!', ephemeral: true });
+            return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
         }
 
         const game = activeGames.get(userId);
 
         if (action === 'higher' || action === 'lower') {
             if (!game) {
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
 
             clearGameTimeout(userId);
 
             const result = game.guess(action);
             if (!result) {
-                return interaction.followUp({ content: '❌ Action in progress!', ephemeral: true });
+                return interaction.reply({ content: '❌ Action in progress!', ephemeral: true });
             }
 
             activeGames.delete(userId);
@@ -1145,14 +1142,14 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'tower') {
             if (!game) {
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
 
             const tileNum = parseInt(parts[1]);
             const result = game.chooseTile(tileNum);
 
             if (!result.valid) {
-                return interaction.followUp({ content: '❌ Invalid move!', ephemeral: true });
+                return interaction.reply({ content: '❌ Invalid move!', ephemeral: true });
             }
 
             if (!result.success) {
@@ -1225,12 +1222,12 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'towercash') {
             if (!game) {
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const payout = game.cashout();
             if (payout === 0) {
-                return interaction.followUp({ content: '❌ Cannot cashout at level 0!', ephemeral: true });
+                return interaction.reply({ content: '❌ Cannot cashout at level 0!', ephemeral: true });
             }
 
             clearGameTimeout(userId);
@@ -1257,12 +1254,12 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'hit') {
             if (!game) {
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const result = game.hit();
             if (!result) {
-                return interaction.followUp({ content: '❌ Action already in progress!', ephemeral: true });
+                return interaction.reply({ content: '❌ Action already in progress!', ephemeral: true });
             }
 
             if (result.busted) {
@@ -1305,12 +1302,12 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'stand') {
             if (!game) {
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const result = game.stand();
             if (!result) {
-                return interaction.followUp({ content: '❌ Action already in progress!', ephemeral: true });
+                return interaction.reply({ content: '❌ Action already in progress!', ephemeral: true });
             }
 
             clearGameTimeout(userId);
@@ -1340,14 +1337,14 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'mine') {
             if (!game) {
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const position = parseInt(parts[1]);
             const result = game.reveal(position);
 
             if (!result.valid) {
-                return interaction.followUp({ content: '❌ Invalid move!', ephemeral: true });
+                return interaction.reply({ content: '❌ Invalid move!', ephemeral: true });
             }
 
             if (result.bomb) {
@@ -1407,12 +1404,12 @@ client.on('interactionCreate', async interaction => {
 
         if (action === 'minecash') {
             if (!game) {
-                return interaction.followUp({ content: '❌ Game not found or expired!', ephemeral: true });
+                return interaction.reply({ content: '❌ Game not found or expired!', ephemeral: true });
             }
             
             const payout = game.cashout();
             if (payout === 0) {
-                return interaction.followUp({ content: '❌ Cashout failed!', ephemeral: true });
+                return interaction.reply({ content: '❌ Cashout failed!', ephemeral: true });
             }
 
             clearGameTimeout(userId);
@@ -1439,7 +1436,7 @@ client.on('interactionCreate', async interaction => {
     } catch (error) {
         console.error('Button interaction error:', error);
         try {
-            await interaction.followUp({ content: '❌ An error occurred. Please try again.', ephemeral: true });
+            await interaction.reply({ content: '❌ An error occurred. Please try again.', ephemeral: true });
         } catch {}
     }
 }
