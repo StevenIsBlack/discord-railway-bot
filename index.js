@@ -838,12 +838,9 @@ client.on('interactionCreate', async interaction => {
                 );
 
                 activeGames.delete(userId);
-                await interaction.editReply({ embeds: [embed], components: [retryRow] });
+                await interaction.update({ embeds: [embed], components: [retryRow] });
             } catch (error) {
                 console.error('Coinflip choice error:', error);
-                try {
-                    await interaction.followUp({ content: '❌ An error occurred. Please try again.', ephemeral: true });
-                } catch {}
             }
         }
     }
