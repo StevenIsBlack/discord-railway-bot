@@ -7,11 +7,7 @@ const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
 const BOT_API_URL = process.env.BOT_API_URL;
 const CLIENT_ID = process.env.CLIENT_ID;
 const CASHOUT_CHANNEL_ID = process.env.CASHOUT_CHANNEL_ID || '1471178234073841826';
-const LOGS_CHANNEL_ID = '1472978640063959293'; // Channel for win/loss logs
-const GAMBLE_LOGS_CHANNEL_ID = '1472978640063959293';
-const GAMBLING_LOG_CHANNEL_ID = '1472978640063959293';
-const GAMBLING_LOG_CHANNEL_ID = '1472978640063959293';
-const GAMBLING_LOG_CHANNEL_ID = '1472978640063959293';
+const GAME_LOG_CHANNEL_ID = '1472978640063959293';
 
 if (!DISCORD_TOKEN || !BOT_API_URL || !CLIENT_ID) {
     console.error('❌ Missing environment variables!');
@@ -37,13 +33,6 @@ const pendingCashouts = new Map();
 const MEMBER_ROLE_ID = '1442921893786161387';
 const MIN_BET = 500000;
 const GAME_TIMEOUT = 5 * 60 * 1000;
-const GAME_LOG_CHANNEL_ID = '1472978640063959293';
-const GAMBLING_LOG_CHANNEL = '1472978640063959293';
-const GAMBLING_LOG_CHANNEL_ID = '1472978640063959293';
-const GAMBLING_LOG_CHANNEL_ID = '1472978640063959293';
-const LOGS_CHANNEL_ID = '1472978640063959293';
-const GAMBLING_LOG_CHANNEL_ID = '1472978640063959293';
-const GAME_LOG_CHANNEL_ID = '1472978640063959293';
 
 function loadBalances() {
     try {
@@ -185,65 +174,18 @@ async function logGameResult(userId, username, gameType, bet, result, payout, wo
     }
 }
 
-        const embed = new EmbedBuilder()
-            .setColor(won ? 0x00ff00 : 0xff0000)
-            .setTitle(`${won ? '✅ WIN' : '❌ LOSS'} - ${gameType}`)
-            .setThumbnail(user.displayAvatarURL())
-            .addFields(
-                { name: '👤 Player', value: `${user.tag} (${user.id})`, inline: true },
-                { name: '🎮 Game', value: gameType, inline: true },
-                { name: '💰 Bet', value: formatAmount(bet), inline: true },
-                { name: '📊 Result', value: result || (won ? 'Won' : 'Lost'), inline: true },
-                { name: '💸 Payout', value: formatAmount(payout), inline: true },
-                { name: '📈 Profit/Loss', value: `${profit >= 0 ? '+' : ''}${formatAmount(profit)}`, inline: true },
-                { name: '💳 New Balance', value: formatAmount(newBalance), inline: false }
-            )
-            .setTimestamp();
-
-        await logsChannel.send({ embeds: [embed] });
-    } catch (error) {
-        console.error('Failed to log gamble result:', error);
+function startGameTimeout(userId, bet) {
+    if (gameTimeouts.has(userId)) {
+        clearTimeout(gameTimeouts.get(userId).timeout);
     }
-}
-
-async function logGamblingResult(user, gameName, bet, result, payout, newBalance) {
-    try {
-        const channel = await client.channels.fetch(GAMBLING_LOG_CHANNEL_ID);
-        if (!channel) return;
-
-        const won = result === 'win' || result === 'WIN!' || payout > bet;
-        const color = won ? 0x00ff00 : result === 'push' || result === 'PUSH' ? 0xffff00 : 0xff0000;
-        
-        let resultText;
-        if (result === 'push' || result === 'PUSH') {
-            resultText = 'PUSH';
-        } else if (won) {
-            resultText = `WON ${formatAmount(payout - bet)}`;
-        } else {
-            resultText = `LOST ${formatAmount(bet)}`;
-        }
-
-        const embed = new EmbedBuilder()
-            .setColor(color)
-            .setTitle(`${gameName} - ${resultText}`)
-            .addFields(
-                { name: 'Player', value: `${user.tag} (${user})`, inline: true },
-                { name: 'Bet', value: formatAmount(bet), inline: true },
-                { name: 'Payout', value: formatAmount(payout), inline: true },
-                { name: 'New Balance', value: formatAmount(newBalance), inline: true }
-            )
-            .setTimestamp();
-
-        await channel.send({ embeds: [embed] });
-    } catch (error) {
-        console.error('Failed to log gambling result:', error);
-    }
-}
-
+    
+    const timeoutData = {
+        timeout: setTimeout(() => {
+            if (activeGames.has(userId)) {
+                activeGames.delete(userId);
+                setBalance(userId, getBalance(userId) + bet);
                 console.log(`Game timeout for user ${userId} - refunded ${formatAmount(bet)}`);
                 gameTimeouts.delete(userId);
-                
-                // Try to notify the user their game timed out
                 client.users.fetch(userId).then(user => {
                     user.send(`⏱️ Your game timed out after 5 minutes of inactivity. Your bet of **${formatAmount(bet)}** has been refunded.`).catch(() => {});
                 }).catch(() => {});
