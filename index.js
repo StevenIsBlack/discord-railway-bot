@@ -210,7 +210,7 @@ function clearGameTimeout(userId) {
 function playCoinflip(choice, bet) {
     const result = Math.random() < 0.5 ? 'heads' : 'tails';
     const won = result === choice;
-    return { result, won, payout: won ? bet * 2 : 0 };
+    return { result, won, payout: won ? Math.floor(bet * 1.5) : 0 };
 }
 
 class BlackjackGame {
@@ -409,7 +409,7 @@ class HigherLowerGame {
     constructor(bet, userId) {
         this.bet = bet;
         this.userId = userId;
-        this.currentNumber = Math.floor(Math.random() * 3) + 4; // 4-6
+        this.currentNumber = Math.floor(Math.random() * 10) + 1; // 1-10 truly random
         this.gameOver = false;
         this.locked = false;
     }
@@ -434,7 +434,7 @@ class HigherLowerGame {
             won,
             currentNumber: this.currentNumber,
             nextNumber,
-            payout: won ? this.bet * 2 : 0
+            payout: won ? Math.floor(this.bet * 1.5) : 0
         };
     }
 }
@@ -623,7 +623,7 @@ client.on('interactionCreate', async interaction => {
                 .setDescription('Choose your side!')
                 .addFields(
                     { name: 'Bet', value: formatAmount(bet), inline: true },
-                    { name: 'Potential Win', value: formatAmount(bet * 2), inline: true }
+                    { name: 'Potential Win', value: formatAmount(Math.floor(bet * 1.5)), inline: true }
                 );
 
             activeGames.set(userId, { type: 'coinflip', bet });
@@ -713,7 +713,7 @@ client.on('interactionCreate', async interaction => {
                 .setDescription(`**Current Number:** ${game.currentNumber}`)
                 .addFields(
                     { name: 'Bet', value: formatAmount(bet), inline: true },
-                    { name: 'Potential Win', value: formatAmount(bet * 2), inline: true }
+                    { name: 'Potential Win', value: formatAmount(Math.floor(bet * 1.5)), inline: true }
                 )
                 .setFooter({ text: 'Will the next number be higher or lower?' });
 
@@ -816,7 +816,7 @@ client.on('interactionCreate', async interaction => {
                     'Coinflip',
                     betAmount,
                     `Chose ${choice}, result was ${result.result}`,
-                    result.won ? betAmount * 2 : 0,
+                    result.won ? Math.floor(betAmount * 1.5) : 0,
                     result.won
                 );
 
@@ -964,7 +964,7 @@ client.on('interactionCreate', async interaction => {
                     .setDescription('Choose your side!')
                     .addFields(
                         { name: 'Bet', value: formatAmount(retryBet), inline: true },
-                        { name: 'Potential Win', value: formatAmount(retryBet * 2), inline: true }
+                        { name: 'Potential Win', value: formatAmount(Math.floor(retryBet * 1.5)), inline: true }
                     );
 
                 activeGames.set(userId, { type: 'coinflip', bet: retryBet });
@@ -1004,7 +1004,7 @@ client.on('interactionCreate', async interaction => {
                     .setDescription(`**Current Number:** ${game.currentNumber}`)
                     .addFields(
                         { name: 'Bet', value: formatAmount(retryBet), inline: true },
-                        { name: 'Potential Win', value: formatAmount(retryBet * 2), inline: true }
+                        { name: 'Potential Win', value: formatAmount(Math.floor(retryBet * 1.5)), inline: true }
                     )
                     .setFooter({ text: 'Will the next number be higher or lower?' });
 
@@ -1117,7 +1117,7 @@ client.on('interactionCreate', async interaction => {
                 'Higher/Lower',
                 game.bet,
                 `Current: ${result.currentNumber}, Next: ${result.nextNumber}, Guess: ${action}`,
-                result.won ? game.bet * 2 : 0,
+                result.won ? Math.floor(game.bet * 1.5) : 0,
                 result.won
             );
 
@@ -1605,9 +1605,9 @@ client.on('interactionCreate', async interaction => {
                         .setTitle('🎰 Welcome to the Casino!')
                         .setDescription(`**Your Balance:** ${formatAmount(balance)}\n**Minimum Bet:** ${formatAmount(MIN_BET)}\n\n**Choose your game:**`)
                         .addFields(
-                            { name: '🪙 Coinflip', value: '50/50 - **2x payout**', inline: true },
+                            { name: '🪙 Coinflip', value: '50/50 - **1.5x payout**', inline: true },
                             { name: '🃏 Blackjack', value: 'Beat dealer - **2x payout**', inline: true },
-                            { name: '🔢 Higher/Lower', value: 'Guess next number - **2x payout**', inline: true },
+                            { name: '🔢 Higher/Lower', value: 'Guess next number - **1.5x payout**', inline: true },
                             { name: '💣 Mines (5 Bombs)', value: 'Easy - **Max 1.5x**', inline: true },
                             { name: '💣 Mines (7 Bombs)', value: 'Medium - **Max 2x**', inline: true },
                             { name: '💣 Mines (12 Bombs)', value: 'Hard - **Max 3x**', inline: true },
