@@ -409,7 +409,7 @@ class HigherLowerGame {
     constructor(bet, userId) {
         this.bet = bet;
         this.userId = userId;
-        this.currentNumber = Math.floor(Math.random() * 10) + 1; // 1-10 truly random
+        this.currentNumber = Math.floor(Math.random() * 4) + 4; // 4-7, fair for both higher and lower
         this.gameOver = false;
         this.locked = false;
     }
@@ -418,16 +418,14 @@ class HigherLowerGame {
         if (this.gameOver || this.locked) return null;
         this.locked = true;
         
-        const nextNumber = Math.floor(Math.random() * 10) + 1; // 1-10
+        // Re-roll until next number is different from current (no ties)
+        let nextNumber;
+        do {
+            nextNumber = Math.floor(Math.random() * 10) + 1;
+        } while (nextNumber === this.currentNumber);
+
         const isHigher = nextNumber > this.currentNumber;
-        const isEqual = nextNumber === this.currentNumber;
-        
-        let won;
-        if (isEqual) {
-            won = false;
-        } else {
-            won = (choice === 'higher' && isHigher) || (choice === 'lower' && !isHigher);
-        }
+        const won = (choice === 'higher' && isHigher) || (choice === 'lower' && !isHigher);
         
         this.gameOver = true;
         return {
@@ -1155,6 +1153,7 @@ client.on('interactionCreate', async interaction => {
             if (!result.success) {
                 clearGameTimeout(userId);
                 activeGames.delete(userId);
+                logGameResult(userId, interaction.user.username, 'Tower', game.bet, `Failed at level ${result.level + 1}`, 0, false);
                 const embed = new EmbedBuilder()
                     .setColor(0xff0000)
                     .setTitle('🗼 Tower - FAILED!')
@@ -1176,6 +1175,7 @@ client.on('interactionCreate', async interaction => {
                 clearGameTimeout(userId);
                 activeGames.delete(userId);
                 setBalance(userId, getBalance(userId) + result.payout);
+                logGameResult(userId, interaction.user.username, 'Tower', game.bet, `Completed all 10 levels! ${game.getMultiplier().toFixed(2)}x`, result.payout, true);
 
                 const embed = new EmbedBuilder()
                     .setColor(0xffd700)
@@ -1233,6 +1233,7 @@ client.on('interactionCreate', async interaction => {
             clearGameTimeout(userId);
             activeGames.delete(userId);
             setBalance(userId, getBalance(userId) + payout);
+            logGameResult(userId, interaction.user.username, 'Tower', game.bet, `Cashed out at level ${game.currentLevel}, ${game.getMultiplier().toFixed(2)}x`, payout, true);
 
             const embed = new EmbedBuilder()
                 .setColor(0x00ff00)
@@ -1265,6 +1266,7 @@ client.on('interactionCreate', async interaction => {
             if (result.busted) {
                 clearGameTimeout(userId);
                 activeGames.delete(userId);
+                logGameResult(userId, interaction.user.username, 'Blackjack', game.bet, `Busted with ${game.calculateValue(game.playerHand)}`, 0, false);
                 const embed = new EmbedBuilder()
                     .setColor(0xff0000)
                     .setTitle('🃏 Blackjack - BUSTED!')
@@ -1313,6 +1315,7 @@ client.on('interactionCreate', async interaction => {
             clearGameTimeout(userId);
             activeGames.delete(userId);
             setBalance(userId, getBalance(userId) + result.payout);
+            logGameResult(userId, interaction.user.username, 'Blackjack', game.bet, `Player: ${game.calculateValue(game.playerHand)}, Dealer: ${game.calculateValue(game.dealerHand)} - ${result.result.toUpperCase()}`, result.payout, result.result === 'win');
 
             const color = result.result === 'win' ? 0x00ff00 : result.result === 'lose' ? 0xff0000 : 0xffff00;
             const resultText = result.result === 'win' ? `Won **${formatAmount(result.payout)}**!` : result.result === 'lose' ? `Lost **${formatAmount(game.bet)}**!` : `Push! Bet returned.`;
@@ -1350,6 +1353,7 @@ client.on('interactionCreate', async interaction => {
             if (result.bomb) {
                 clearGameTimeout(userId);
                 activeGames.delete(userId);
+                logGameResult(userId, interaction.user.username, 'Mines', game.bet, `Hit a bomb! ${game.bombCount} bombs, ${game.revealed.size} tiles revealed`, 0, false);
                 const embed = new EmbedBuilder()
                     .setColor(0xff0000)
                     .setTitle('💣 Mines - BOOM!')
@@ -1415,6 +1419,7 @@ client.on('interactionCreate', async interaction => {
             clearGameTimeout(userId);
             activeGames.delete(userId);
             setBalance(userId, getBalance(userId) + payout);
+            logGameResult(userId, interaction.user.username, 'Mines', game.bet, `Cashed out! ${game.bombCount} bombs, ${game.revealed.size} tiles, ${game.multiplier.toFixed(2)}x`, payout, true);
 
             const embed = new EmbedBuilder()
                 .setColor(0x00ff00)
