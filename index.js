@@ -1,15 +1,13 @@
 const { Client, GatewayIntentBits, EmbedBuilder, REST, Routes, SlashCommandBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, PermissionFlagsBits } = require('discord.js');
-const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
 
 const DISCORD_TOKEN = process.env.DISCORD_TOKEN;
-const BOT_API_URL = process.env.BOT_API_URL;
 const CLIENT_ID = process.env.CLIENT_ID;
 const CASHOUT_CHANNEL_ID = process.env.CASHOUT_CHANNEL_ID || '1471178234073841826';
 const GAME_LOG_CHANNEL_ID = '1472978640063959293';
 
-if (!DISCORD_TOKEN || !BOT_API_URL || !CLIENT_ID) {
+if (!DISCORD_TOKEN || !CLIENT_ID) {
     console.error('❌ Missing environment variables!');
     process.exit(1);
 }
@@ -69,14 +67,7 @@ const commands = [
     new SlashCommandBuilder().setName('payment').setDescription('💳 View payment methods'),
     new SlashCommandBuilder().setName('sell').setDescription('💸 Sell to us'),
     new SlashCommandBuilder().setName('domain').setDescription('🌐 Website information'),
-    new SlashCommandBuilder().setName('add').setDescription('Add bot').addStringOption(o => o.setName('token').setDescription('Token').setRequired(true)),
-    new SlashCommandBuilder().setName('remove').setDescription('Remove bot').addStringOption(o => o.setName('botid').setDescription('Bot ID').setRequired(true)),
-    new SlashCommandBuilder().setName('stopall').setDescription('Stop all bots'),
-    new SlashCommandBuilder().setName('status').setDescription('Bot status'),
-    new SlashCommandBuilder().setName('list').setDescription('List bots'),
     new SlashCommandBuilder().setName('help').setDescription('Show commands'),
-    new SlashCommandBuilder().setName('forcemsg').setDescription('Force ALL bots to message player').addStringOption(o => o.setName('player').setDescription('Player name').setRequired(true)),
-    new SlashCommandBuilder().setName('stopforce').setDescription('Stop force messaging and resume queue'),
     new SlashCommandBuilder().setName('balance').setDescription('💰 Check your gambling balance'),
     new SlashCommandBuilder().setName('addbalance').setDescription('💵 Add balance to user (Admin only)')
         .addUserOption(o => o.setName('user').setDescription('User').setRequired(true))
@@ -103,22 +94,6 @@ const rest = new REST({ version: '10' }).setToken(DISCORD_TOKEN);
         console.error('❌ Failed:', error);
     }
 })();
-
-async function callBotAPI(endpoint, data = {}) {
-    try {
-        const response = await axios.post(`${BOT_API_URL}${endpoint}`, data, {
-            headers: { 'Content-Type': 'application/json' },
-            timeout: 30000
-        });
-        return response.data;
-    } catch (error) {
-        throw new Error(error.response?.data?.error || error.message);
-    }
-}
-
-function generateBotId() {
-    return 'bot_' + Date.now().toString().slice(-6);
-}
 
 function getBalance(userId) {
     return userBalances.get(userId) || 0;
@@ -335,18 +310,14 @@ class MinesGame {
         this.multiplier = 1.0;
         this.locked = false;
         
-        // Calculate increments based on max multipliers
-        // 5 bombs: 20 safe tiles, max 1.5x
-        // 7 bombs: 18 safe tiles, max 2x
-        // 12 bombs: 13 safe tiles, max 3x
         if (bombCount === 5) {
-            this.multiplierIncrement = 0.5 / 20; // (1.5-1) / 20 safe tiles
+            this.multiplierIncrement = 0.5 / 20;
             this.maxMultiplier = 1.5;
         } else if (bombCount === 7) {
-            this.multiplierIncrement = 1.0 / 18; // (2-1) / 18 safe tiles
+            this.multiplierIncrement = 1.0 / 18;
             this.maxMultiplier = 2.0;
         } else if (bombCount === 12) {
-            this.multiplierIncrement = 2.0 / 13; // (3-1) / 13 safe tiles
+            this.multiplierIncrement = 2.0 / 13;
             this.maxMultiplier = 3.0;
         }
     }
@@ -389,7 +360,6 @@ class MinesGame {
 
     getBoardString() {
         let str = '';
-        // Show 5 rows of 5 tiles each
         for (let i = 0; i < 25; i++) {
             if (i > 0 && i % 5 === 0) str += '\n';
             if (this.revealed.has(i)) {
@@ -409,7 +379,7 @@ class HigherLowerGame {
     constructor(bet, userId) {
         this.bet = bet;
         this.userId = userId;
-        this.currentNumber = Math.floor(Math.random() * 4) + 4; // 4-7, fair for both higher and lower
+        this.currentNumber = Math.floor(Math.random() * 4) + 4;
         this.gameOver = false;
         this.locked = false;
     }
@@ -418,7 +388,6 @@ class HigherLowerGame {
         if (this.gameOver || this.locked) return null;
         this.locked = true;
         
-        // Re-roll until next number is different from current (no ties)
         let nextNumber;
         do {
             nextNumber = Math.floor(Math.random() * 10) + 1;
@@ -572,13 +541,10 @@ client.on('interactionCreate', async interaction => {
     if (interaction.isModalSubmit()) {
         try {
             await interaction.deferReply({ ephemeral: false });
-            console.log('Modal deferred successfully');
             
             const parts = interaction.customId.split('_');
             const gameType = parts[0];
             const userId = parts[1];
-            
-            console.log('GameType:', gameType, 'UserId:', userId);
             
             if (interaction.user.id !== userId) {
                 return interaction.editReply({ content: '❌ Not your game!' });
@@ -587,22 +553,18 @@ client.on('interactionCreate', async interaction => {
             clearGameTimeout(userId);
 
             const betInput = interaction.fields.getTextInputValue('bet_amount');
-            console.log('Bet input:', betInput);
             const bet = parseAmount(betInput);
-            console.log('Parsed bet:', bet);
 
             if (isNaN(bet) || bet < MIN_BET) {
                 return interaction.editReply({ content: `❌ Minimum bet is **${formatAmount(MIN_BET)}**!` });
             }
 
             const balance = getBalance(userId);
-            console.log('User balance:', balance);
             if (balance < bet) {
                 return interaction.editReply({ content: `❌ Insufficient balance! You have **${formatAmount(balance)}**` });
             }
 
             setBalance(userId, balance - bet);
-            console.log('Balance deducted, starting game:', gameType);
 
             if (gameType === 'coinflip') {
             const row = new ActionRowBuilder().addComponents(
@@ -651,14 +613,10 @@ client.on('interactionCreate', async interaction => {
             await interaction.editReply({ embeds: [embed], components: [row] });
 
             } else if (gameType.startsWith('mines')) {
-            console.log('Starting mines game');
             const bombs = parseInt(gameType.split('-')[1]);
-            console.log('Bomb count:', bombs);
             const game = new MinesGame(bet, bombs, userId);
-            console.log('Mines game created');
             activeGames.set(userId, game);
             startGameTimeout(userId, bet);
-            console.log('Game stored and timeout started');
 
             const embed = new EmbedBuilder()
                 .setColor(0x0099ff)
@@ -672,7 +630,6 @@ client.on('interactionCreate', async interaction => {
                 .setFooter({ text: 'Click tiles to reveal diamonds • Avoid the bombs!' });
 
             const rows = [];
-            // 5 rows of 5 buttons each (tiles 0-24)
             for (let r = 0; r < 5; r++) {
                 const row = new ActionRowBuilder();
                 for (let c = 0; c < 5; c++) {
@@ -687,18 +644,13 @@ client.on('interactionCreate', async interaction => {
                 rows.push(row);
             }
             
-            // Add cashout button as 5th row (since Discord allows max 5 action rows)
-            // We'll replace the last button in the 5th row with cashout
             rows[4].components[4] = new ButtonBuilder()
                 .setCustomId(`minecash_${userId}`)
                 .setLabel('💰')
                 .setStyle(ButtonStyle.Success)
                 .setDisabled(true);
-            
-            console.log('About to send mines reply with', rows.length, 'rows');
 
             await interaction.editReply({ embeds: [embed], components: rows });
-            console.log('Mines game started successfully');
 
             } else if (gameType === 'higherlower') {
             const game = new HigherLowerGame(bet, userId);
@@ -772,7 +724,6 @@ client.on('interactionCreate', async interaction => {
         }
 
         if (action === 'game-select') {
-            // Block if there's already an active game
             if (activeGames.has(userId)) {
                 return interaction.reply({ content: '❌ You already have an active game! Finish it first before starting a new one.', ephemeral: true });
             }
@@ -807,7 +758,6 @@ client.on('interactionCreate', async interaction => {
                     setBalance(userId, getBalance(userId) + result.payout);
                 }
                 
-                const finalBalance = getBalance(userId);
                 logGameResult(
                     userId,
                     interaction.user.username,
@@ -834,6 +784,11 @@ client.on('interactionCreate', async interaction => {
 
                 activeGames.delete(userId);
                 await interaction.update({ embeds: [embed], components: [retryRow] });
+                setTimeout(async () => {
+                    try {
+                        await interaction.editReply({ components: [] });
+                    } catch {}
+                }, 30000);
             } catch (error) {
                 console.error('Coinflip choice error:', error);
             }
@@ -845,16 +800,12 @@ client.on('interactionCreate', async interaction => {
             const parts = interaction.customId.split('_');
             const action = parts[0];
             
-            // Extract userId based on button type
             let userId;
             if (action === 'retry') {
-                // retry_gametype_userId_bet
                 userId = parts[2];
             } else if (action === 'cashout-confirm' || action === 'cashout-decline') {
-                // cashout-confirm_userId or cashout-decline_userId
                 userId = parts[1];
             } else {
-                // Most other buttons: action_userId or action_param_userId
                 userId = parts[parts.length - 1];
             }
         
@@ -918,19 +869,8 @@ client.on('interactionCreate', async interaction => {
         if (action === 'retry') {
             const gameType = parts[1];
             const retryBet = parseInt(parts[3]);
-            
-            console.log('Retry button clicked:', {
-                customId: interaction.customId,
-                parts,
-                action,
-                gameType,
-                userId,
-                actualUserId: interaction.user.id,
-                retryBet
-            });
 
             if (interaction.user.id !== userId) {
-                console.log('User ID mismatch!', interaction.user.id, '!==', userId);
                 return interaction.reply({ content: '❌ Not your game!', ephemeral: true });
             }
 
@@ -1073,7 +1013,6 @@ client.on('interactionCreate', async interaction => {
                     rows.push(row);
                 }
                 
-                // Replace last button with cashout
                 rows[4].components[4] = new ButtonBuilder()
                     .setCustomId(`minecash_${userId}`)
                     .setLabel('💰')
@@ -1108,7 +1047,6 @@ client.on('interactionCreate', async interaction => {
                 setBalance(userId, getBalance(userId) + result.payout);
             }
             
-            const finalBalance = getBalance(userId);
             logGameResult(
                 userId,
                 interaction.user.username,
@@ -1135,6 +1073,11 @@ client.on('interactionCreate', async interaction => {
             );
 
             await interaction.update({ embeds: [embed], components: [retryRow] });
+            setTimeout(async () => {
+                try {
+                    await interaction.editReply({ components: [] });
+                } catch {}
+            }, 30000);
             return;
         }
 
@@ -1168,6 +1111,11 @@ client.on('interactionCreate', async interaction => {
                 );
 
                 await interaction.update({ embeds: [embed], components: [retryRow] });
+                setTimeout(async () => {
+                    try {
+                        await interaction.editReply({ components: [] });
+                    } catch {}
+                }, 30000);
                 return;
             }
 
@@ -1192,6 +1140,11 @@ client.on('interactionCreate', async interaction => {
                 );
 
                 await interaction.update({ embeds: [embed], components: [retryRow] });
+                setTimeout(async () => {
+                    try {
+                        await interaction.editReply({ components: [] });
+                    } catch {}
+                }, 30000);
                 return;
             }
 
@@ -1250,6 +1203,11 @@ client.on('interactionCreate', async interaction => {
             );
 
             await interaction.update({ embeds: [embed], components: [retryRow] });
+            setTimeout(async () => {
+                try {
+                    await interaction.editReply({ components: [] });
+                } catch {}
+            }, 30000);
             return;
         }
 
@@ -1282,6 +1240,11 @@ client.on('interactionCreate', async interaction => {
                 );
 
                 await interaction.update({ embeds: [embed], components: [retryRow] });
+                setTimeout(async () => {
+                    try {
+                        await interaction.editReply({ components: [] });
+                    } catch {}
+                }, 30000);
                 return;
             }
 
@@ -1335,6 +1298,11 @@ client.on('interactionCreate', async interaction => {
             );
 
             await interaction.update({ embeds: [embed], components: [retryRow] });
+            setTimeout(async () => {
+                try {
+                    await interaction.editReply({ components: [] });
+                } catch {}
+            }, 30000);
             return;
         }
 
@@ -1368,6 +1336,11 @@ client.on('interactionCreate', async interaction => {
                 );
 
                 await interaction.update({ embeds: [embed], components: [retryRow] });
+                setTimeout(async () => {
+                    try {
+                        await interaction.editReply({ components: [] });
+                    } catch {}
+                }, 30000);
                 return;
             }
 
@@ -1397,7 +1370,6 @@ client.on('interactionCreate', async interaction => {
                 rows.push(row);
             }
             
-            // Replace last button with cashout (enabled now)
             rows[4].components[4] = new ButtonBuilder()
                 .setCustomId(`minecash_${userId}`)
                 .setLabel('💰')
@@ -1436,6 +1408,11 @@ client.on('interactionCreate', async interaction => {
             );
 
             await interaction.update({ embeds: [embed], components: [retryRow] });
+            setTimeout(async () => {
+                try {
+                    await interaction.editReply({ components: [] });
+                } catch {}
+            }, 30000);
             return;
         }
     } catch (error) {
@@ -1636,7 +1613,6 @@ client.on('interactionCreate', async interaction => {
 
                     await gamblingChannel.send({ embeds: [embed], components: [row] });
 
-                    // Auto-delete after 5 minutes of inactivity
                     setTimeout(async () => {
                         try {
                             const ch = await interaction.guild.channels.fetch(gamblingChannel.id).catch(() => null);
@@ -1654,6 +1630,26 @@ client.on('interactionCreate', async interaction => {
                 } catch (error) {
                     console.error('Error creating gambling channel:', error);
                     await interaction.editReply({ content: '❌ Failed to create gambling channel. Please try again.' });
+                }
+                break;
+            }
+
+            case 'cleargame': {
+                if (activeGames.has(interaction.user.id)) {
+                    const game = activeGames.get(interaction.user.id);
+                    const refundAmount = game.bet || 0;
+                    
+                    activeGames.delete(interaction.user.id);
+                    clearGameTimeout(interaction.user.id);
+                    
+                    if (refundAmount > 0) {
+                        setBalance(interaction.user.id, getBalance(interaction.user.id) + refundAmount);
+                        await interaction.reply({ content: `✅ Your stuck game has been cleared and your bet of **${formatAmount(refundAmount)}** has been refunded!`, ephemeral: true });
+                    } else {
+                        await interaction.reply({ content: '✅ Your stuck game has been cleared!', ephemeral: true });
+                    }
+                } else {
+                    await interaction.reply({ content: '❌ You don\'t have any active games to clear.', ephemeral: true });
                 }
                 break;
             }
@@ -1774,169 +1770,13 @@ client.on('interactionCreate', async interaction => {
                 break;
             }
 
-            case 'add': {
-                const token = interaction.options.getString('token');
-                const botId = generateBotId();
-                await interaction.deferReply();
-                try {
-                    const result = await callBotAPI('/add', { username: botId, token });
-                    await interaction.editReply({ embeds: [new EmbedBuilder().setColor(0x00ff00).setTitle('✅ Bot Started').addFields({ name: 'Bot ID', value: `\`${botId}\``, inline: true }, { name: 'Username', value: result.mcUsername || 'Unknown', inline: true }).setTimestamp()] });
-                } catch (error) {
-                    await interaction.editReply(`❌ ${error.message}`);
-                }
-                break;
-            }
-
-            case 'remove': {
-                const removeId = interaction.options.getString('botid');
-                try {
-                    await callBotAPI('/remove', { username: removeId });
-                    await interaction.reply(`✅ Stopped ${removeId}`);
-                } catch (error) {
-                    await interaction.reply(`❌ ${error.message}`);
-                }
-                break;
-            }
-
-            case 'stopall': {
-                await interaction.deferReply();
-                try {
-                    const result = await callBotAPI('/stopall', {});
-                    await interaction.editReply(`⛔ Stopped ${result.stopped} bot(s)`);
-                } catch (error) {
-                    await interaction.editReply(`❌ ${error.message}`);
-                }
-                break;
-            }
-
-            case 'status': {
-                try {
-                    const response = await axios.get(`${BOT_API_URL}/status`, { timeout: 10000 });
-                    const { online = 0, total = 0 } = response.data;
-                    await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x0099ff).setTitle('📊 Status').setDescription(`**Bots:** ${online}/${total} online`).setTimestamp()] });
-                } catch (error) {
-                    await interaction.reply(`❌ ${error.message}`);
-                }
-                break;
-            }
-
-            case 'list': {
-                try {
-                    const response = await axios.get(`${BOT_API_URL}/status`, { timeout: 10000 });
-                    const { online = 0, total = 0 } = response.data;
-                    await interaction.reply(`📋 **Bots:** ${online}/${total} online`);
-                } catch (error) {
-                    await interaction.reply(`❌ ${error.message}`);
-                }
-                break;
-            }
-
-            case 'forcemsg': {
-                const player = interaction.options.getString('player');
-                await interaction.deferReply();
-                try {
-                    const result = await callBotAPI('/forcemsg', { target: player });
-                    await interaction.editReply(`✅ **${result.sent}** bot(s) force messaging **${player}**\n\nUse \`/stopforce\` to stop`);
-                } catch (error) {
-                    await interaction.editReply(`❌ ${error.message}`);
-                }
-                break;
-            }
-
-            case 'stopforce': {
-                try {
-                    const result = await callBotAPI('/stopforce', {});
-                    await interaction.reply(`✅ Stopped force on ${result.stopped} bot(s)`);
-                } catch (error) {
-                    await interaction.reply(`❌ ${error.message}`);
-                }
-                break;
-            }
-
             case 'help': {
                 await interaction.reply({ embeds: [new EmbedBuilder().setColor(0x0099ff).setTitle('📖 Bot Commands').setDescription('All available commands').addFields(
                     { name: '🛒 Shop Commands', value: '`/rules` • `/prices` • `/payment` • `/sell` • `/domain` • `/website`', inline: false },
-                    { name: '🎰 Gambling', value: '`/gamble` • `/balance` • `/cashout`', inline: false },
-                    { name: '🤖 Bot Management', value: '`/add` • `/remove` • `/stopall` • `/status` • `/list`', inline: false },
-                    { name: '🎯 Advanced', value: '`/forcemsg` • `/stopforce`', inline: false },
+                    { name: '🎰 Gambling', value: '`/gamble` • `/balance` • `/cashout` • `/cleargame`', inline: false },
+                    { name: '⚙️ Admin', value: '`/addbalance` • `/removebalance` • `/setbalance`', inline: false },
                     { name: '📢 Info', value: '`/vouch` • `/rewards` • `/help`', inline: false }
                 ).setFooter({ text: 'DonutMarket Bot System' }).setTimestamp()] });
-                break;
-            }
-        }
-    } catch (error) {
-        console.error(error);
-    }
-});
-
-client.on('messageCreate', async (message) => {
-    if (message.author.bot) return;
-    if (!message.content.startsWith('!')) return;
-
-    const args = message.content.slice(1).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
-
-    try {
-        if (['rules', 'prices', 'payment', 'sell', 'domain'].includes(command)) {
-            await message.reply(`Please use: \`/${command}\``);
-            return;
-        }
-
-        switch (command) {
-            case 'add': {
-                const token = args.join(' ');
-                const botId = generateBotId();
-                try { await message.delete(); } catch {}
-                const loading = await message.channel.send(`⏳ Starting...`);
-                try {
-                    const result = await callBotAPI('/add', { username: botId, token });
-                    await loading.edit({ content: null, embeds: [new EmbedBuilder().setColor(0x00ff00).setTitle('✅ Bot Started').addFields({ name: 'ID', value: `\`${botId}\`` }, { name: 'User', value: result.mcUsername || 'Unknown' })] });
-                } catch (error) {
-                    await loading.edit(`❌ ${error.message}`);
-                }
-                break;
-            }
-
-            case 'stopall': {
-                try {
-                    const result = await callBotAPI('/stopall', {});
-                    await message.reply(`⛔ Stopped ${result.stopped} bot(s)`);
-                } catch (error) {
-                    await message.reply(`❌ ${error.message}`);
-                }
-                break;
-            }
-
-            case 'status': {
-                try {
-                    const response = await axios.get(`${BOT_API_URL}/status`, { timeout: 10000 });
-                    const { online = 0, total = 0 } = response.data;
-                    await message.reply(`📊 **Bots:** ${online}/${total} online`);
-                } catch (error) {
-                    await message.reply(`❌ ${error.message}`);
-                }
-                break;
-            }
-
-            case 'forcemsg': {
-                const player = args[0];
-                if (!player) return message.reply('Usage: `!forcemsg <player>`');
-                try {
-                    const result = await callBotAPI('/forcemsg', { target: player });
-                    await message.reply(`✅ ${result.sent} bot(s) spamming **${player}**`);
-                } catch (error) {
-                    await message.reply(`❌ ${error.message}`);
-                }
-                break;
-            }
-
-            case 'stopforce': {
-                try {
-                    const result = await callBotAPI('/stopforce', {});
-                    await message.reply(`✅ Stopped force on ${result.stopped} bot(s)`);
-                } catch (error) {
-                    await message.reply(`❌ ${error.message}`);
-                }
                 break;
             }
         }
