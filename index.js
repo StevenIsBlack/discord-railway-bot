@@ -1722,7 +1722,7 @@ client.on('interactionCreate', async interaction => {
                     .setTitle('💰 DonutMarket Prices')
                     .setDescription('**DonutMarket • Trusted Service**')
                     .addFields(
-                        { name: '💀 Skeleton Spawner Prices', value: '```\n1 Spawner = €0.23\n━━━━━━━━━━━━━━━━━\n100 Spawners  → €23.00\n200 Spawners  → €46.00\n400 Spawners  → €92.00\n800 Spawners  → €184.00\n1000 Spawners → €230.00```', inline: false },
+                        { name: '💀 Skeleton Spawner Prices', value: '```\n1 Spawner = €0.30\n━━━━━━━━━━━━━━━━━\n100 Spawners  → €30.00\n200 Spawners  → €60.00\n400 Spawners  → €120.00\n800 Spawners  → €240.00\n1000 Spawners → €300.00```', inline: false },
                         { name: '💵 In-Game Money Prices', value: '```\n1M = €0.08\n━━━━━━━━━━━━━━━━━\n100M  → €8.00\n250M  → €20.00\n500M  → €40.00\n750M  → €60.00\n1B    → €80.00```', inline: false },
                         { name: '🦅 Elytra Prices', value: '```\n1 Elytra → €40.00```', inline: true },
                         { name: '🎮 Minecraft Account', value: '```\nJava & Bedrock → €15.00```', inline: true },
